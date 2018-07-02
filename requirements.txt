@@ -1,0 +1,5 @@
+git+https://github.com/Rapptz/discord.py@rewrite
+aiohttp==3.3.2
+aiosqlite==0.3.0
+xmltodict
+apscheduler
