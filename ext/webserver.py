@@ -208,7 +208,7 @@ class Webserver:
         # creation of the message embed
         emb = discord.Embed(title=data["title"],
                             description=ch["display_name"],
-                            url="https://www.twitch.com/" + ch["login"],
+                            url="https://www.twitch.tv/" + ch["login"],
                             color=discord.Colour.purple())
         emb.timestamp = datetime.datetime.now()
         emb.set_image(url=data["thumbnail_url"].format(width=320, height=180))
