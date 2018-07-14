@@ -3,7 +3,7 @@ from discord.ext import commands
 
 import aiosqlite
 import datetime
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import asyncio
 
 
 class Reddit:
@@ -11,61 +11,63 @@ class Reddit:
     def __init__(self, bot):
         self.bot = bot
 
-        # create scheduler and add polling job at a 1 second interval
-        self.scheduler = AsyncIOScheduler(event_loop=self.bot.loop)
-        self.scheduler.add_job(self.poll, "interval", seconds=1, id="polling", replace_existing=True)
-        self.scheduler.start()
+        # create polling background task
+        self.bot.reddit_poller = self.bot.loop.create_task(self.poll())
 
     async def poll(self):
+        await self.bot.wait_until_ready()
+
         async with aiosqlite.connect("data.db") as db:
-            # loop through all subreddits and check if a new post is up
-            subreddits = await db.execute("SELECT * FROM Subreddits")
-            async for row in subreddits:
-                parsingChannelUrl = f"https://www.reddit.com/r/{row[1]}/new.json"
-                parsingChannelHeader = {'cache-control': "no-cache"}
-                parsingChannelQueryString = {"sort": "new", "limit": "1"}
-                async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader,
-                                                params=parsingChannelQueryString) as resp:
-                    submissions_obj = await resp.json()
+            while not self.bot.is_closed():
+                # loop through all subreddits and check if a new post is up
+                subreddits = await db.execute("SELECT * FROM Subreddits")
+                async for row in subreddits:
+                    parsingChannelUrl = f"https://www.reddit.com/r/{row[1]}/new.json"
+                    parsingChannelHeader = {'cache-control': "no-cache"}
+                    parsingChannelQueryString = {"sort": "new", "limit": "1"}
+                    async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader,
+                                                    params=parsingChannelQueryString) as resp:
+                        submissions_obj = await resp.json()
 
-                submission_data = submissions_obj["data"]["children"][0]["data"]
+                    submission_data = submissions_obj["data"]["children"][0]["data"]
 
-                # new post found
-                if submission_data["id"] != row[2] and submission_data["created_utc"] > row[3]:
-                    # update last post data in database
-                    await db.execute("UPDATE Subreddits SET LastPostID=?, LastPostTime=? WHERE ID=?",
-                                     (submission_data["id"], submission_data["created_utc"], row[0]))
-                    await db.commit()
+                    # new post found
+                    if submission_data["id"] != row[2] and submission_data["created_utc"] > row[3]:
+                        # update last post data in database
+                        await db.execute("UPDATE Subreddits SET LastPostID=?, LastPostTime=? WHERE ID=?",
+                                         (submission_data["id"], submission_data["created_utc"], row[0]))
+                        await db.commit()
 
-                    # create message embed
-                    emb = discord.Embed(title=submission_data["title"],
-                                        color=discord.Colour.dark_blue(),
-                                        url="https://www.reddit.com" + submission_data["permalink"])
-                    emb.timestamp = datetime.datetime.now()
-                    emb.set_author(name=submission_data["author"])
+                        # create message embed
+                        emb = discord.Embed(title=submission_data["title"],
+                                            color=discord.Colour.dark_blue(),
+                                            url="https://www.reddit.com" + submission_data["permalink"])
+                        emb.timestamp = datetime.datetime.now()
+                        emb.set_author(name=submission_data["author"])
 
-                    # if post content is very big, trim it
-                    if len(submission_data["selftext"]) > 1900:
-                        emb.description = submission_data["selftext"][:1900] + "... `click title to continue`"
-                    else:
-                        emb.description = submission_data["selftext"]
+                        # if post content is very big, trim it
+                        if len(submission_data["selftext"]) > 1900:
+                            emb.description = submission_data["selftext"][:1900] + "... `click title to continue`"
+                        else:
+                            emb.description = submission_data["selftext"]
 
-                    if submission_data["thumbnail"] != "self" and "_" not in submission_data["thumbnail"]:
-                        emb.set_image(url=submission_data["thumbnail"])
+                        if submission_data["thumbnail"] != "self" and "_" not in submission_data["thumbnail"]:
+                            emb.set_image(url=submission_data["thumbnail"])
 
-                    # send notification to every subscribed server
-                    channels = await db.execute("SELECT Guilds.AnnounceChannelID \
-                                                 FROM SubredditSubscriptions INNER JOIN Guilds \
-                                                 ON SubredditSubscriptions.Guild=Guilds.ID \
-                                                 WHERE Subreddit=?", (row[0],))
+                        # send notification to every subscribed server
+                        channels = await db.execute("SELECT Guilds.AnnounceChannelID \
+                                                     FROM SubredditSubscriptions INNER JOIN Guilds \
+                                                     ON SubredditSubscriptions.Guild=Guilds.ID \
+                                                     WHERE Subreddit=?", (row[0],))
 
-                    async for ch in channels:
-                        announceChannel = self.bot.get_channel(ch[0])
-                        await announceChannel.send("A new post in /r/" + row[1] + " !", embed=emb)
+                        async for ch in channels:
+                            announceChannel = self.bot.get_channel(ch[0])
+                            await announceChannel.send("A new post in /r/" + row[1] + " !", embed=emb)
 
-                    await channels.close()
+                        await channels.close()
 
-            await subreddits.close()
+                await subreddits.close()
+                await asyncio.sleep(0.5)
 
     # who and where the commands are permitted to use
     @commands.has_permissions(manage_messages=True)
