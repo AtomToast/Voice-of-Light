@@ -30,20 +30,21 @@ class SurrenderNow:
         async with aiosqlite.connect("data.db") as db:
             cursor = await db.execute("SELECT * FROM Keywords")
             async for row in cursor:
+                kw = " " + row[0] + " "
                 # check if keyword appears in post
-                if obj["Data"]["cleanContent"].lower().count(row[0]) > 0:
+                if obj["Data"]["cleanContent"].lower().count(kw) > 0:
                     extracts = []
                     # find paragraphs with keyword
                     for part in obj["Data"]["cleanContent"].split("\n \n"):
-                        if row[0] in part.lower():
+                        if kw in part.lower():
                             extracts.append(part.strip())
 
                     # create message embed and send it to the server
                     content = "\n\n".join(extracts)
                     if len(content) > 2000:
-                        content = content[:2000] + "... `" + str(obj['Data']['cleanContent'].lower().count(row[0])) + "` mentions in total"
+                        content = content[:2000] + "... `" + str(obj['Data']['cleanContent'].lower().count(kw)) + "` mentions in total"
 
-                    emb = discord.Embed(title=f"**{row[0]}** was mentioned in this post!",
+                    emb = discord.Embed(title=f"'{row[0]}' was mentioned in this post!",
                                         color=discord.Colour.orange(),
                                         description="\n\n".join(extracts),
                                         url=obj["Data"]["url"],
