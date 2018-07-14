@@ -40,8 +40,6 @@ class Webserver:
         self.site = web.TCPSite(self.runner)
         await self.site.start()
 
-        await self.runner.cleanup()
-
     # will be called by the scheduler above
     # goes through all twitch and youtube channels in the database
     # and refresh their subscription

@@ -63,6 +63,7 @@ async def kill(ctx):
     await ctx.send(":(")
     ws = bot.get_cog("Webserver")
     await ws.site.stop()
+    await ws.runner.cleanup()
     await bot.session.close()
     await bot.close()
 
