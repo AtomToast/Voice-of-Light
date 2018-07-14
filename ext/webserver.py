@@ -15,7 +15,7 @@ class Webserver:
 
         # create the application and add routes
         self.app = web.Application()
-        self.app.add_routes([web.get("/GOOGLE DOMAIN VERIFICATION FILE", self.googleverification)])
+        self.app.add_routes([web.get("/" + auth_token.google_callback_verification, self.googleverification)])
         self.app.add_routes([web.post("/youtube", self.youtube)])
         self.app.add_routes([web.get("/youtube", self.youtubeverification)])
         self.app.add_routes([web.post("/twitch", self.twitch)])
@@ -23,7 +23,7 @@ class Webserver:
 
         # push notification run out after a specified time so I need to refresh them regularly
         self.scheduler = AsyncIOScheduler(event_loop=self.bot.loop)
-        self.scheduler.add_job(self.refresh_subscriptions, "interval", days=5, id="refresher", replace_existing=True)
+        self.scheduler.add_job(self.refresh_subscriptions, "interval", days=1, id="refresher", replace_existing=True)
         self.scheduler.start()
 
     # run the webserver
@@ -43,7 +43,7 @@ class Webserver:
                 ID = row[0]
                 parsingChannelUrl = "https://api.twitch.tv/helix/webhooks/hub"
                 parsingChannelHeader = {'Client-ID': auth_token.twitch}
-                parsingChannelQueryString = {"hub.mode": "subscribe", "hub.callback": "CALLBACK URL/twitch",
+                parsingChannelQueryString = {"hub.mode": "subscribe", "hub.callback": auth_token.server_url + "/twitch",
                                              "hub.topic": "https://api.twitch.tv/helix/streams?user_id=" + ID, "hub.lease_seconds": 864000}
                 async with self.bot.session.post(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
                     if resp.status != 202:
@@ -55,7 +55,7 @@ class Webserver:
                 ID = row[0]
                 parsingChannelUrl = "https://pubsubhubbub.appspot.com/subscribe"
                 parsingChannelHeader = {'Client-ID': auth_token.twitch}
-                parsingChannelQueryString = {"hub.mode": "subscribe", "hub.callback": "CALLBACK URL/youtube",
+                parsingChannelQueryString = {"hub.mode": "subscribe", "hub.callback": auth_token.server_url + "/youtube",
                                              "hub.topic": "https://www.youtube.com/xml/feeds/videos.xml?channel_id=" + ID, "hub.lease_seconds": 864000}
                 async with self.bot.session.post(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
                     if resp.status != 202:

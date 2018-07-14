@@ -104,7 +104,7 @@ class Youtube:
 
         # send subscription request to youtube
         parsingChannelUrl = "https://pubsubhubbub.appspot.com/subscribe"
-        parsingChannelQueryString = {"hub.mode": "subscribe", "hub.callback": "CALLBACK URL/youtube",
+        parsingChannelQueryString = {"hub.mode": "subscribe", "hub.callback": auth_token.server_url + "/youtube",
                                      "hub.topic": "https://www.youtube.com/xml/feeds/videos.xml?channel_id=" + channel_id, "hub.lease_seconds": 864000}
         async with self.bot.session.post(parsingChannelUrl, params=parsingChannelQueryString) as resp:
             if resp.status != 202:
@@ -165,7 +165,7 @@ class Youtube:
 
         # send unsubscribe request
         parsingChannelUrl = "https://pubsubhubbub.appspot.com/subscribe"
-        parsingChannelQueryString = {"hub.mode": "unsubscribe", "hub.callback": "CALLBACK URL/youtube",
+        parsingChannelQueryString = {"hub.mode": "unsubscribe", "hub.callback": auth_token.server_url + "/youtube",
                                      "hub.topic": "https://www.youtube.com/xml/feeds/videos.xml?channel_id=" + channel_id}
         async with self.bot.session.post(parsingChannelUrl, params=parsingChannelQueryString) as resp:
             if resp.status != 202:
