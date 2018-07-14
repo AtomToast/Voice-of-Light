@@ -1,63 +1,13 @@
 import discord
 from discord.ext import commands
 
-import aiohttp
 import aiosqlite
-import datetime
 
 
 class SurrenderNow:
     """Add or remove keywords to annouce from surrender@20 posts"""
     def __init__(self, bot):
         self.bot = bot
-
-    async def start_websocket(self):
-        # create a websocket to the api server
-        self.session = aiohttp.ClientSession()
-        async with self.session.ws_connect("ws://surrendernow.gg:3000/", timeout=40) as ws:
-            async for msg in ws:
-                if msg.type == aiohttp.WSMsgType.TEXT:
-                    obj = msg.json()
-                    if obj["Type"] == "POST_RELEASED":
-                        await self.handler(obj)
-                elif msg.type == aiohttp.WSMsgType.CLOSED:
-                    break
-                elif msg.type == aiohttp.WSMsgType.ERROR:
-                    break
-        print("Websocket connection closed")
-
-    async def handler(self, obj):
-        async with aiosqlite.connect("data.db") as db:
-            cursor = await db.execute("SELECT * FROM Keywords")
-            async for row in cursor:
-                kw = " " + row[0] + " "
-                # check if keyword appears in post
-                if obj["Data"]["cleanContent"].lower().count(kw) > 0:
-                    extracts = []
-                    # find paragraphs with keyword
-                    for part in obj["Data"]["cleanContent"].split("\n \n"):
-                        if kw in part.lower():
-                            extracts.append(part.strip())
-
-                    # create message embed and send it to the server
-                    content = "\n\n".join(extracts)
-                    if len(content) > 2000:
-                        content = content[:2000] + "... `" + str(obj['Data']['cleanContent'].lower().count(kw)) + "` mentions in total"
-
-                    emb = discord.Embed(title=f"'{row[0]}' was mentioned in this post!",
-                                        color=discord.Colour.orange(),
-                                        description="\n\n".join(extracts),
-                                        url=obj["Data"]["url"],
-                                        timestamp=datetime.datetime.now())
-                    emb.set_image(url=obj["Data"]["image"])
-                    emb.set_author(name=obj["Data"]["title"])
-                    emb.set_footer(text="Powered by surrendernow.gg")
-
-                    channels = await db.execute("SELECT AnnounceChannelID FROM Guilds WHERE ID=?", (row[1],))
-                    channel_id = await channels.fetchone()
-                    channel = self.bot.get_channel(channel_id[0])
-                    await channel.send(embed=emb)
-            await cursor.close()
 
     # who and where the commands are permitted to use
     @commands.has_permissions(manage_messages=True)

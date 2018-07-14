@@ -20,18 +20,27 @@ class Webserver:
         self.app.add_routes([web.get("/youtube", self.youtubeverification)])
         self.app.add_routes([web.post("/twitch", self.twitch)])
         self.app.add_routes([web.get("/twitch", self.twitchverification)])
+        self.app.add_routes([web.post("/surrenderat20", self.surrenderat20)])
+        self.app.add_routes([web.get("/surrenderat20", self.surrenderat20verification)])
 
         # push notification run out after a specified time so I need to refresh them regularly
         self.scheduler = AsyncIOScheduler(event_loop=self.bot.loop)
         self.scheduler.add_job(self.refresh_subscriptions, "interval", days=1, id="refresher", replace_existing=True)
         self.scheduler.start()
 
+        # create the run task
+        self.bot.run_webserver = self.bot.loop.create_task(self.run())
+
     # run the webserver
     async def run(self):
+        await self.bot.wait_until_ready()
+
         self.runner = web.AppRunner(self.app)
         await self.runner.setup()
         self.site = web.TCPSite(self.runner)
         await self.site.start()
+
+        await self.runner.cleanup()
 
     # will be called by the scheduler above
     # goes through all twitch and youtube channels in the database
@@ -54,13 +63,20 @@ class Webserver:
             async for row in cursor:
                 ID = row[0]
                 parsingChannelUrl = "https://pubsubhubbub.appspot.com/subscribe"
-                parsingChannelHeader = {'Client-ID': auth_token.twitch}
                 parsingChannelQueryString = {"hub.mode": "subscribe", "hub.callback": auth_token.server_url + "/youtube",
                                              "hub.topic": "https://www.youtube.com/xml/feeds/videos.xml?channel_id=" + ID, "hub.lease_seconds": 864000}
                 async with self.bot.session.post(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
                     if resp.status != 202:
                         print(resp.text)
             await cursor.close()
+
+        # refresh surrenderat20 subscription
+        parsingChannelUrl = "https://pubsubhubbub.appspot.com/subscribe"
+        parsingChannelQueryString = {"hub.mode": "subscribe", "hub.callback": auth_token.server_url + "/surrenderat20",
+                                     "hub.topic": "feeds.feedburner.com/surrenderat20", "hub.lease_seconds": 864000}
+        async with self.bot.session.post(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
+            if resp.status != 202:
+                print(resp.text)
 
         print("Refreshed Subscriptions")
 
@@ -244,6 +260,45 @@ class Webserver:
             await cursor.close()
         return web.Response()
 
+    # handler for posts to the /surrenderat20 endpoint
+    async def surrenderat20(self, request):
+        obj = xmltodict.parse(await request.text())
+        print("---------------------------------------")
+        print(obj)
+        print("---------------------------------------")
+        return web.Response()
+
+        async with aiosqlite.connect("data.db") as db:
+            cursor = await db.execute("SELECT * FROM Keywords")
+            async for row in cursor:
+                kw = " " + row[0] + " "
+                # check if keyword appears in post
+                if obj["Data"]["cleanContent"].lower().count(kw) > 0:
+                    extracts = []
+                    # find paragraphs with keyword
+                    for part in obj["Data"]["cleanContent"].split("\n \n"):
+                        if kw in part.lower():
+                            extracts.append(part.strip())
+
+                    # create message embed and send it to the server
+                    content = "\n\n".join(extracts)
+                    if len(content) > 2000:
+                        content = content[:2000] + "... `" + str(obj['Data']['cleanContent'].lower().count(kw)) + "` mentions in total"
+
+                    emb = discord.Embed(title=f"'{row[0]}' was mentioned in this post!",
+                                        color=discord.Colour.orange(),
+                                        description="\n\n".join(extracts),
+                                        url=obj["Data"]["url"],
+                                        timestamp=datetime.datetime.now())
+                    emb.set_image(url=obj["Data"]["image"])
+                    emb.set_author(name=obj["Data"]["title"])
+
+                    channels = await db.execute("SELECT AnnounceChannelID FROM Guilds WHERE ID=?", (row[1],))
+                    channel_id = await channels.fetchone()
+                    channel = self.bot.get_channel(channel_id[0])
+                    await channel.send(embed=emb)
+            await cursor.close()
+
     # various verification endpoints
     # will verify the url as my own to google
     async def googleverification(self, request):
@@ -255,6 +310,10 @@ class Webserver:
 
     # will verify twitch subscriptions
     async def twitchverification(self, request):
+        return web.Response(text=request.query["hub.challenge"])
+
+    # will verify surrenderat20 subscription
+    async def surrenderat20verification(self, request):
         return web.Response(text=request.query["hub.challenge"])
 
 

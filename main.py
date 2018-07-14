@@ -32,10 +32,6 @@ async def on_ready():
     print(bot.user.name)
     print(bot.user.id)
     print('------')
-    ws = bot.get_cog("Webserver")
-    await ws.run()
-    sn = bot.get_cog("SurrenderNow")
-    await sn.start_websocket()
 
 
 # add new guilds to database
@@ -67,8 +63,6 @@ async def kill(ctx):
     await ctx.send(":(")
     ws = bot.get_cog("Webserver")
     await ws.site.stop()
-    sn = bot.get_cog("SurrenderNow")
-    await sn.session.close()
     await bot.session.close()
     await bot.close()
 
