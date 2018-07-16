@@ -67,7 +67,7 @@ class Reddit:
                         await channels.close()
 
                 await subreddits.close()
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(1)
 
     # who and where the commands are permitted to use
     @commands.has_permissions(manage_messages=True)

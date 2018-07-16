@@ -71,7 +71,7 @@ class Webserver:
         # refresh surrenderat20 subscription
         parsingChannelUrl = "https://pubsubhubbub.appspot.com/subscribe"
         parsingChannelQueryString = {"hub.mode": "subscribe", "hub.callback": auth_token.server_url + "/surrenderat20",
-                                     "hub.topic": "feeds.feedburner.com/surrenderat20", "hub.lease_seconds": 864000}
+                                     "hub.topic": "https://feeds.feedburner.com/surrenderat20", "hub.lease_seconds": 864000}
         async with self.bot.session.post(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
             if resp.status != 202:
                 print(resp.text)
@@ -260,11 +260,19 @@ class Webserver:
 
     # handler for posts to the /surrenderat20 endpoint
     async def surrenderat20(self, request):
-        obj = xmltodict.parse(await request.text())
-        print("---------------------------------------")
-        print(obj)
-        print("---------------------------------------")
-        return web.Response()
+        print("got sth")
+        try:
+            obj = xmltodict.parse(await request.text())
+            print("---------------------------------------")
+            print(obj)
+            print("---------------------------------------")
+        except Exception:
+            obj = await request.json()
+            print("---------------------------------------")
+            print(obj)
+            print("---------------------------------------")
+        finally:
+            return web.Response()
 
         async with aiosqlite.connect("data.db") as db:
             cursor = await db.execute("SELECT * FROM Keywords")
@@ -312,6 +320,7 @@ class Webserver:
 
     # will verify surrenderat20 subscription
     async def surrenderat20verification(self, request):
+        print("subscription request got")
         return web.Response(text=request.query["hub.challenge"])
 
 
