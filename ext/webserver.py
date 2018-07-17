@@ -5,6 +5,7 @@ import auth_token
 import aiosqlite
 import xmltodict
 import datetime
+import re
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 
@@ -12,6 +13,7 @@ class Webserver:
     """A webserver for handling notifications"""
     def __init__(self, bot):
         self.bot = bot
+        self.cleanr = re.compile('<.*?>')
 
         # create the application and add routes
         self.app = web.Application()
@@ -122,7 +124,7 @@ class Webserver:
                             description=video["channelTitle"],
                             url=obj["feed"]["entry"]["link"]["@href"],
                             color=discord.Colour.red())
-        emb.timestamp = datetime.datetime.now()
+        emb.timestamp = datetime.datetime.utcnow()
         emb.set_image(url=video["thumbnails"]["default"]["url"])
         emb.set_footer(icon_url=channel_obj["snippet"]["thumbnails"]["default"]["url"], text="Youtube")
 
@@ -145,8 +147,8 @@ class Webserver:
                 dt_str = dt[0][0]
                 while len(dt_str.split("-")[0]) < 4:
                     dt_str = "0" + dt_str
-                if (datetime.datetime.now() - datetime.datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')).total_seconds() > 60 * 60:
-                    await db.execute("UPDATE YoutubeChannels SET LastLive=? WHERE ID=?", (datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), obj["feed"]["entry"]["yt:channelId"]))
+                if (datetime.datetime.utcnow() - datetime.datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')).total_seconds() > 60 * 60:
+                    await db.execute("UPDATE YoutubeChannels SET LastLive=? WHERE ID=?", (datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'), obj["feed"]["entry"]["yt:channelId"]))
                     await db.commit()
                 else:
                     # stream was restarted
@@ -224,7 +226,7 @@ class Webserver:
                             description=ch["display_name"],
                             url="https://www.twitch.tv/" + ch["login"],
                             color=discord.Colour.purple())
-        emb.timestamp = datetime.datetime.now()
+        emb.timestamp = datetime.datetime.utcnow()
         emb.set_image(url=data["thumbnail_url"].format(width=320, height=180))
         emb.set_footer(icon_url=ch["profile_image_url"], text="Twitch")
         emb.set_thumbnail(url=game_url)
@@ -238,8 +240,8 @@ class Webserver:
             dt_str = dt[0][0]
             while len(dt_str.split("-")[0]) < 4:
                 dt_str = "0" + dt_str
-            if (datetime.datetime.now() - datetime.datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')).total_seconds() > 60 * 60:
-                await db.execute("UPDATE TwitchChannels SET LastLive=? WHERE ID=?", (datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ch["id"]))
+            if (datetime.datetime.utcnow() - datetime.datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')).total_seconds() > 60 * 60:
+                await db.execute("UPDATE TwitchChannels SET LastLive=? WHERE ID=?", (datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'), ch["id"]))
                 await db.commit()
             else:
                 # stream was restarted
@@ -260,50 +262,82 @@ class Webserver:
 
     # handler for posts to the /surrenderat20 endpoint
     async def surrenderat20(self, request):
-        print("got sth")
-        try:
-            obj = xmltodict.parse(await request.text())
-            print("---------------------------------------")
-            print(obj)
-            print("---------------------------------------")
-        except Exception:
-            obj = await request.json()
-            print("---------------------------------------")
-            print(obj)
-            print("---------------------------------------")
-        finally:
-            return web.Response()
+        obj = await request.json()
+        item = obj["items"][0]
+
+        emb = discord.Embed(title=item["title"],
+                            color=discord.Colour.orange(),
+                            description=" ".join(item["categories"]),
+                            url=item["permalinkUrl"],
+                            timestamp=datetime.datetime.utcnow())
+        emb.set_thumbnail(url="https://images-ext-2.discordapp.net/external/p4GLboECWMVLnDH-Orv6nkWm3OG8uLdI2reNRQ9RX74/http/3.bp.blogspot.com/-M_ecJWWc5CE/Uizpk6U3lwI/AAAAAAAACLo/xyh6eQNRzzs/s640/sitethumb.jpg")
+        if item["actor"]["id"] == "Aznbeat":
+            author_img = "https://images-ext-2.discordapp.net/external/HI8rRYejC0QYULMmoDBTcZgJ52U0Msvwj9JmUxd-JAI/https/disqus.com/api/users/avatars/Aznbeat.jpg"
+        else:
+            author_img = "https://images-ext-2.discordapp.net/external/t0bRQzNtKHoIDcFcj2X8R0O0UPqeeyKdvawNbVMoHXE/https/disqus.com/api/users/avatars/Moobeat.jpg"
+        emb.set_author(name=item["actor"]["display_name"], icon_url=author_img)
+
+        content = item["content"]
+        startImgPos = content.find('<img', 0, len(content)) + 4
+        if(startImgPos > -1):
+            endImgPos = content.find('>', startImgPos, len(content))
+            imageTag = content[startImgPos:endImgPos]
+            startSrcPos = imageTag.find('src="', 0, len(content)) + 5
+            endSrcPos = imageTag.find('"', startSrcPos, len(content))
+            linkTag = imageTag[startSrcPos:endSrcPos]
+
+            emb.set_image(url=linkTag)
 
         async with aiosqlite.connect("data.db") as db:
-            cursor = await db.execute("SELECT * FROM Keywords")
-            async for row in cursor:
-                kw = " " + row[0] + " "
-                # check if keyword appears in post
-                if obj["Data"]["cleanContent"].lower().count(kw) > 0:
-                    extracts = []
-                    # find paragraphs with keyword
-                    for part in obj["Data"]["cleanContent"].split("\n \n"):
-                        if kw in part.lower():
-                            extracts.append(part.strip())
+            subscriptions = await db.execute("SELECT * FROM SurrenderAt20Subscriptions")
+            async for guild_subscriptions in subscriptions:
+                for category in item["categories"]:
+                    if category == "Red Posts":
+                        if guild_subscriptions[1] == 1:
+                            break
+                    elif category == "PBE":
+                        if guild_subscriptions[2] == 1:
+                            break
+                    elif category == "Rotations":
+                        if guild_subscriptions[3] == 1:
+                            break
+                    elif category == "Esports":
+                        if guild_subscriptions[4] == 1:
+                            break
+                    elif category == "Releases":
+                        if guild_subscriptions[5] == 1:
+                            break
+                else:
+                    continue
 
-                    # create message embed and send it to the server
-                    content = "\n\n".join(extracts)
-                    if len(content) > 2000:
-                        content = content[:2000] + "... `" + str(obj['Data']['cleanContent'].lower().count(kw)) + "` mentions in total"
+                guild_emb = emb
+                keywords = await db.execute("SELECT Keyword FROM Keywords WHERE Guild=?", (guild_subscriptions[0],))
+                async for keyword in keywords:
+                    kw = " " + keyword + " "
+                    # check if keyword appears in post
+                    brokentext = item["content"].replace("<br />", "\n")
+                    cleantext = re.sub(self.cleanr, '', brokentext).replace("&nbsp;", " ")
+                    if kw in cleantext.lower():
+                        extracts = []
+                        # find paragraphs with keyword
+                        for part in cleantext.split("\n\n"):
+                            if kw in part.lower():
+                                extracts.append(part.strip())
 
-                    emb = discord.Embed(title=f"'{row[0]}' was mentioned in this post!",
-                                        color=discord.Colour.orange(),
-                                        description="\n\n".join(extracts),
-                                        url=obj["Data"]["url"],
-                                        timestamp=datetime.datetime.now())
-                    emb.set_image(url=obj["Data"]["image"])
-                    emb.set_author(name=obj["Data"]["title"])
+                        # create message embed and send it to the server
+                        content = "\n\n".join(extracts)
+                        if len(content) > 2000:
+                            content = content[:2000] + "... `" + str(cleantext) + "` mentions in total"
 
-                    channels = await db.execute("SELECT AnnounceChannelID FROM Guilds WHERE ID=?", (row[1],))
-                    channel_id = await channels.fetchone()
-                    channel = self.bot.get_channel(channel_id[0])
-                    await channel.send(embed=emb)
-            await cursor.close()
+                        guild_emb.add_field(name=f"'{keyword}' was mentioned in this post!", value="\n\n".join(extracts), inline=False)
+                await keywords.close()
+
+                channels = await db.execute("SELECT AnnounceChannelID FROM Guilds WHERE ID=?", (guild_subscriptions[0],))
+                channel_id = await channels.fetchone()
+                channel = self.bot.get_channel(channel_id[0])
+                await channel.send("New Surrender@20 post!", embed=emb)
+
+        return web.Response()
 
     # various verification endpoints
     # will verify the url as my own to google

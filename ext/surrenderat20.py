@@ -14,21 +14,132 @@ class SurrenderAt20:
     @commands.guild_only()
     @commands.group(aliases=["ff20"])
     async def surrenderat20(self, ctx):
-        """Add and remove Keywords to search for in Surrender@20 posts.
-
-        Found keywords will be posted with a short extract and a link to the post"""
+        """Subscribe to Surrender@20 posts and search for keywords in posts."""
         if ctx.invoked_subcommand is None:
             await ctx.send("You need to specify an action \n(use 'help surrendernow' for more information)")
 
-    @surrenderat20.command(aliases=["add"])
-    async def add_keyword(self, ctx, *, keyword=None):
-        """Adds a keyword to search for
+    @surrenderat20.command(aliases=["sub"])
+    async def subscribe(self, ctx, *, categories):
+        """Subscribes to Surrender@20
 
-        Results will be posted in the specified channel"""
+        You can specify the categories you want to subscribe to or name none and subscribe to all.
+
+        The possible categories are:
+        - Red Posts
+        - PBE
+        - Rotations
+        - Esports
+        - Releases"""
         async with aiosqlite.connect("data.db") as db:
             # check if announcement channel is set up
             cursor = await db.execute("SELECT AnnounceChannelID FROM Guilds WHERE ID=?", (ctx.guild.id,))
             row = await cursor.fetchall()
+            await cursor.close()
+            if len(row) == 0:
+                await ctx.send("You need to set up a notifications channel before subscribing to anything")
+                return
+
+            # if nothing is specified, subscribe to everything
+            if categories is None:
+                redposts = True
+                pbe = True
+                rotations = True
+                esports = True
+                releases = True
+            else:
+                # looks for each category and sets a boolean variable for it
+                categories = categories.lower()
+                redposts = "red posts" in categories
+                pbe = "pbe" in categories
+                rotations = "rotations" in categories
+                esports = "esports" in categories
+                releases = "releases" in categories
+
+                # return error if no categories are no found but they are also not None
+                if not redposts and not pbe and not rotations and not esports and not releases:
+                    await ctx.send("No categories found, potentially check for typos")
+                    return
+
+            # enter information into database
+            await db.execute("INSERT INTO SurrenderAt20Subscriptions (Guild, RedPosts, PBE, Rotations, Esports, Releases) \
+                             VALUES (?, ?, ?, ?, ?, ?)",
+                             (ctx.guild.id, redposts, pbe, rotations, esports, releases))
+            await db.commit()
+
+        # create message embed and send response
+        emb = discord.Embed(title="Successfully subscribed to " + categories.title(),
+                            color=discord.Colour.green())
+        emb.set_thumbnail(url="https://images-ext-2.discordapp.net/external/p4GLboECWMVLnDH-Orv6nkWm3OG8uLdI2reNRQ9RX74/http/3.bp.blogspot.com/-M_ecJWWc5CE/Uizpk6U3lwI/AAAAAAAACLo/xyh6eQNRzzs/s640/sitethumb.jpg")
+
+        await ctx.send(embed=emb)
+
+    @surrenderat20.command(aliases=["unsub"])
+    async def unsubscribe(self, ctx, *, categories):
+        """Unsubscribes from Surrender@20
+
+        You can specify the categories you want to unsubscribe from or name none and unsubscribe from all.
+
+        The possible categories are:
+        - Red Posts
+        - PBE
+        - Rotations
+        - Esports
+        - Releases"""
+        async with aiosqlite.connect("data.db") as db:
+            n = await db.execute("SELECT * FROM SurrenderAt20Subscriptions WHERE Guild=?", (ctx.guild.id))
+            results = await n.fetchall()
+            await n.close()
+            if len(results) == 0:
+                await ctx.send("You are not subscribed to any categories")
+                return
+
+            # if nothing is specified, unsubscribe from everything
+            if categories is None:
+                await db.execute("DELETE FROM SurrenderAt20Subscriptions WHERE Guild=?", (ctx.guild.id,))
+                await db.commt()
+            else:
+                categories = categories.lower()
+                # return error if no categories are no found but they are also not None
+                if "red posts" not in categories and "pbe" not in categories and "rotations" not in categories and "esports" not in categories and "releases" not in categories:
+                    await ctx.send("No categories found, potentially check for typos")
+                    return
+
+                result = results[0]
+                redposts, pbe, rotations, esports, releases = result[1:]
+                # looks for each category and update boolean variable for it
+                if "red posts" in categories:
+                    redposts = 0
+                if "pbe" in categories:
+                    pbe = 0
+                if "rotations" in categories:
+                    rotations = 0
+                if "esports" in categories:
+                    esports = 0
+                if "releases" in categories:
+                    releases = 0
+
+                # enter information into database
+                await db.execute("UPDATE SurrenderAt20Subscriptions \
+                                  SET RedPosts=?, PBE=?, Rotations=?, Esports=?, Releases=?) \
+                                  WHERE Guild=?",
+                                 (redposts, pbe, rotations, esports, releases, ctx.guild.id))
+                await db.commit()
+
+        # create message embed and send response
+        emb = discord.Embed(title="Successfully unsubscribed from " + categories.title(),
+                            color=discord.Colour.red())
+        emb.set_thumbnail(url="https://images-ext-2.discordapp.net/external/p4GLboECWMVLnDH-Orv6nkWm3OG8uLdI2reNRQ9RX74/http/3.bp.blogspot.com/-M_ecJWWc5CE/Uizpk6U3lwI/AAAAAAAACLo/xyh6eQNRzzs/s640/sitethumb.jpg")
+
+        await ctx.send(embed=emb)
+
+    @surrenderat20.command(aliases=["add"])
+    async def add_keyword(self, ctx, *, keyword=None):
+        """Adds a keyword to search for"""
+        async with aiosqlite.connect("data.db") as db:
+            # check if announcement channel is set up
+            cursor = await db.execute("SELECT AnnounceChannelID FROM Guilds WHERE ID=?", (ctx.guild.id,))
+            row = await cursor.fetchall()
+            await cursor.close()
             if len(row) == 0:
                 await ctx.send("You need to set up a notifications channel before subscribing to any channels")
                 return
@@ -56,9 +167,7 @@ class SurrenderAt20:
 
     @surrenderat20.command(aliases=["remove"])
     async def remove_keyword(self, ctx, *, keyword=None):
-        """Removes a keyword
-
-        Results will no longer be posted"""
+        """Removes a keyword"""
         if keyword is None:
             await ctx.send("You need to spefify the keyword you want to remove")
             return

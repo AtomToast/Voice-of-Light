@@ -52,6 +52,7 @@ async def on_guild_remove(guild):
         await db.execute("DELETE FROM TwitchSubscriptions WHERE Guild=?", (guild.id,))
         await db.execute("DELETE FROM SubredditSubscriptions WHERE Guild=?", (guild.id,))
         await db.execute("DELETE FROM Keywords WHERE Guild=?", (guild.id,))
+        await db.execute("DELETE FROM SurrenderAt20Subscriptions WHERE Guild=?", (guild.id,))
         await db.commit()
     print(f"<< Left {guild.name}")
 
