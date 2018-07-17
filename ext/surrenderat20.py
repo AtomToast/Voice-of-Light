@@ -39,7 +39,7 @@ class SurrenderAt20:
                 await ctx.send("You need to set up a notifications channel before subscribing to anything")
                 return
 
-            n = await db.execute("SELECT * FROM SurrenderAt20Subscriptions WHERE Guild=?", (ctx.guild.id))
+            n = await db.execute("SELECT * FROM SurrenderAt20Subscriptions WHERE Guild=?", (ctx.guild.id,))
             results = await n.fetchall()
             await n.close()
 
@@ -120,7 +120,7 @@ class SurrenderAt20:
         - Esports
         - Releases"""
         async with aiosqlite.connect("data.db") as db:
-            n = await db.execute("SELECT * FROM SurrenderAt20Subscriptions WHERE Guild=?", (ctx.guild.id))
+            n = await db.execute("SELECT * FROM SurrenderAt20Subscriptions WHERE Guild=?", (ctx.guild.id,))
             results = await n.fetchall()
             await n.close()
             if len(results) == 0:
