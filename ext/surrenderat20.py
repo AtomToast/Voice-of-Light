@@ -4,7 +4,7 @@ from discord.ext import commands
 import aiosqlite
 
 
-class SurrenderNow:
+class SurrenderAt20:
     """Add or remove keywords to annouce from surrender@20 posts"""
     def __init__(self, bot):
         self.bot = bot
@@ -12,15 +12,15 @@ class SurrenderNow:
     # who and where the commands are permitted to use
     @commands.has_permissions(manage_messages=True)
     @commands.guild_only()
-    @commands.group(aliases=["sn"])
-    async def surrendernow(self, ctx):
+    @commands.group(aliases=["ff20"])
+    async def surrenderat20(self, ctx):
         """Add and remove Keywords to search for in Surrender@20 posts.
 
         Found keywords will be posted with a short extract and a link to the post"""
         if ctx.invoked_subcommand is None:
             await ctx.send("You need to specify an action \n(use 'help surrendernow' for more information)")
 
-    @surrendernow.command(aliases=["add"])
+    @surrenderat20.command(aliases=["add"])
     async def add_keyword(self, ctx, *, keyword=None):
         """Adds a keyword to search for
 
@@ -54,7 +54,7 @@ class SurrenderNow:
 
         await ctx.send("Successfully added keyword '" + kw + "'")
 
-    @surrendernow.command(aliases=["remove"])
+    @surrenderat20.command(aliases=["remove"])
     async def remove_keyword(self, ctx, *, keyword=None):
         """Removes a keyword
 
@@ -80,7 +80,7 @@ class SurrenderNow:
 
         await ctx.send("Successfully removed keyword '" + kw + "'")
 
-    @surrendernow.command(name="list")
+    @surrenderat20.command(name="list")
     async def _list(self, ctx):
         """Displays a list of all Keywords"""
         names = ""
@@ -98,4 +98,4 @@ class SurrenderNow:
 
 
 def setup(bot):
-    bot.add_cog(SurrenderNow(bot))
+    bot.add_cog(SurrenderAt20(bot))
