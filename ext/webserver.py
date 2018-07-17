@@ -275,9 +275,17 @@ class Webserver:
             author_img = "https://images-ext-2.discordapp.net/external/HI8rRYejC0QYULMmoDBTcZgJ52U0Msvwj9JmUxd-JAI/https/disqus.com/api/users/avatars/Aznbeat.jpg"
         else:
             author_img = "https://images-ext-2.discordapp.net/external/t0bRQzNtKHoIDcFcj2X8R0O0UPqeeyKdvawNbVMoHXE/https/disqus.com/api/users/avatars/Moobeat.jpg"
-        emb.set_author(name=item["actor"]["display_name"], icon_url=author_img)
+        emb.set_author(name=item["actor"]["displayName"], icon_url=author_img)
 
-        content = item["content"]
+        try:
+            content = item["content"]
+        except KeyError:
+            parsingChannelUrl = "https://www.googleapis.com/blogger/v3/blogs/8141971962311514602/posts/" + item["id"][-19:]
+            parsingChannelQueryString = {"key": auth_token.google}
+            async with self.bot.session.get(parsingChannelUrl, params=parsingChannelQueryString) as resp:
+                post_obj = await resp.json()
+            content = post_obj["content"]
+
         startImgPos = content.find('<img', 0, len(content)) + 4
         if(startImgPos > -1):
             endImgPos = content.find('>', startImgPos, len(content))
@@ -313,9 +321,9 @@ class Webserver:
                 guild_emb = emb
                 keywords = await db.execute("SELECT Keyword FROM Keywords WHERE Guild=?", (guild_subscriptions[0],))
                 async for keyword in keywords:
-                    kw = " " + keyword + " "
+                    kw = " " + keyword[0] + " "
                     # check if keyword appears in post
-                    brokentext = item["content"].replace("<br />", "\n")
+                    brokentext = content.replace("<br />", "\n")
                     cleantext = re.sub(self.cleanr, '', brokentext).replace("&nbsp;", " ")
                     if kw in cleantext.lower():
                         extracts = []
@@ -325,17 +333,17 @@ class Webserver:
                                 extracts.append(part.strip())
 
                         # create message embed and send it to the server
-                        content = "\n\n".join(extracts)
-                        if len(content) > 2000:
-                            content = content[:2000] + "... `" + str(cleantext) + "` mentions in total"
+                        exctrats_string = "\n\n".join(extracts)
+                        if len(exctrats_string) > 2000:
+                            exctrats_string = exctrats_string[:2000] + "... `" + str(cleantext) + "` mentions in total"
 
-                        guild_emb.add_field(name=f"'{keyword}' was mentioned in this post!", value="\n\n".join(extracts), inline=False)
+                        guild_emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value="\n\n".join(extracts), inline=False)
                 await keywords.close()
 
                 channels = await db.execute("SELECT AnnounceChannelID FROM Guilds WHERE ID=?", (guild_subscriptions[0],))
                 channel_id = await channels.fetchone()
                 channel = self.bot.get_channel(channel_id[0])
-                await channel.send("New Surrender@20 post!", embed=emb)
+                await channel.send("New Surrender@20 post!", embed=guild_emb)
 
         return web.Response()
 
