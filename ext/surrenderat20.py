@@ -39,33 +39,66 @@ class SurrenderAt20:
                 await ctx.send("You need to set up a notifications channel before subscribing to anything")
                 return
 
-            # if nothing is specified, subscribe to everything
-            if categories is None:
-                categories = "all categories"
-                redposts = True
-                pbe = True
-                rotations = True
-                esports = True
-                releases = True
-            else:
-                # looks for each category and sets a boolean variable for it
-                categories = categories.lower()
-                redposts = "red posts" in categories
-                pbe = "pbe" in categories
-                rotations = "rotations" in categories
-                esports = "esports" in categories
-                releases = "releases" in categories
+            n = await db.execute("SELECT * FROM SurrenderAt20Subscriptions WHERE Guild=?", (ctx.guild.id))
+            results = await n.fetchall()
+            await n.close()
 
+            if len(results) == 1:
+                categories = categories.lower()
                 # return error if no categories are no found but they are also not None
-                if not redposts and not pbe and not rotations and not esports and not releases:
+                if "red posts" not in categories and "pbe" not in categories and "rotations" not in categories and "esports" not in categories and "releases" not in categories:
                     await ctx.send("No categories found, potentially check for typos")
                     return
 
-            # enter information into database
-            await db.execute("INSERT INTO SurrenderAt20Subscriptions (Guild, RedPosts, PBE, Rotations, Esports, Releases) \
-                             VALUES (?, ?, ?, ?, ?, ?)",
-                             (ctx.guild.id, redposts, pbe, rotations, esports, releases))
-            await db.commit()
+                result = results[0]
+                redposts, pbe, rotations, esports, releases = result[1:]
+                # looks for each category and update boolean variable for it
+                if "red posts" in categories:
+                    redposts = 1
+                if "pbe" in categories:
+                    pbe = 1
+                if "rotations" in categories:
+                    rotations = 1
+                if "esports" in categories:
+                    esports = 1
+                if "releases" in categories:
+                    releases = 1
+
+                # enter information into database
+                await db.execute("UPDATE SurrenderAt20Subscriptions \
+                                  SET RedPosts=?, PBE=?, Rotations=?, Esports=?, Releases=?) \
+                                  WHERE Guild=?",
+                                 (redposts, pbe, rotations, esports, releases, ctx.guild.id))
+                await db.commit()
+
+            else:
+                # if nothing is specified, subscribe to everything
+                if categories is None:
+                    categories = "all categories"
+                    redposts = True
+                    pbe = True
+                    rotations = True
+                    esports = True
+                    releases = True
+                else:
+                    # looks for each category and sets a boolean variable for it
+                    categories = categories.lower()
+                    redposts = "red posts" in categories
+                    pbe = "pbe" in categories
+                    rotations = "rotations" in categories
+                    esports = "esports" in categories
+                    releases = "releases" in categories
+
+                    # return error if no categories are no found but they are also not None
+                    if not redposts and not pbe and not rotations and not esports and not releases:
+                        await ctx.send("No categories found, potentially check for typos")
+                        return
+
+                # enter information into database
+                await db.execute("INSERT INTO SurrenderAt20Subscriptions (Guild, RedPosts, PBE, Rotations, Esports, Releases) \
+                                 VALUES (?, ?, ?, ?, ?, ?)",
+                                 (ctx.guild.id, redposts, pbe, rotations, esports, releases))
+                await db.commit()
 
         # create message embed and send response
         emb = discord.Embed(title="Successfully subscribed to " + categories.title(),
