@@ -64,6 +64,8 @@ async def kill(ctx):
     ws = bot.get_cog("Webserver")
     await ws.site.stop()
     await ws.runner.cleanup()
+    rd = bot.get_cog("Reddit")
+    rd.reddit_poller.cancel()
     await bot.session.close()
     await bot.close()
 
