@@ -44,25 +44,33 @@ class SurrenderAt20:
             await n.close()
 
             if len(results) == 1:
-                categories = categories.lower()
-                # return error if no categories are no found but they are also not None
-                if "red posts" not in categories and "pbe" not in categories and "rotations" not in categories and "esports" not in categories and "releases" not in categories:
-                    await ctx.send("No categories found, potentially check for typos")
-                    return
+                if categories is None:
+                    categories = "all categories"
+                    redposts = True
+                    pbe = True
+                    rotations = True
+                    esports = True
+                    releases = True
+                else:
+                    categories = categories.lower()
+                    # return error if no categories are no found but they are also not None
+                    if "red posts" not in categories and "pbe" not in categories and "rotations" not in categories and "esports" not in categories and "releases" not in categories:
+                        await ctx.send("No categories found, potentially check for typos")
+                        return
 
-                result = results[0]
-                redposts, pbe, rotations, esports, releases = result[1:]
-                # looks for each category and update boolean variable for it
-                if "red posts" in categories:
-                    redposts = 1
-                if "pbe" in categories:
-                    pbe = 1
-                if "rotations" in categories:
-                    rotations = 1
-                if "esports" in categories:
-                    esports = 1
-                if "releases" in categories:
-                    releases = 1
+                    result = results[0]
+                    redposts, pbe, rotations, esports, releases = result[1:]
+                    # looks for each category and update boolean variable for it
+                    if "red posts" in categories:
+                        redposts = 1
+                    if "pbe" in categories:
+                        pbe = 1
+                    if "rotations" in categories:
+                        rotations = 1
+                    if "esports" in categories:
+                        esports = 1
+                    if "releases" in categories:
+                        releases = 1
 
                 # enter information into database
                 await db.execute("UPDATE SurrenderAt20Subscriptions \
