@@ -19,7 +19,7 @@ class SurrenderAt20:
             await ctx.send("You need to specify an action \n(use 'help surrendernow' for more information)")
 
     @surrenderat20.command(aliases=["sub"])
-    async def subscribe(self, ctx, *, categories):
+    async def subscribe(self, ctx, *, categories=None):
         """Subscribes to Surrender@20
 
         You can specify the categories you want to subscribe to or name none and subscribe to all.
@@ -41,6 +41,7 @@ class SurrenderAt20:
 
             # if nothing is specified, subscribe to everything
             if categories is None:
+                categories = "all categories"
                 redposts = True
                 pbe = True
                 rotations = True
@@ -74,7 +75,7 @@ class SurrenderAt20:
         await ctx.send(embed=emb)
 
     @surrenderat20.command(aliases=["unsub"])
-    async def unsubscribe(self, ctx, *, categories):
+    async def unsubscribe(self, ctx, *, categories=None):
         """Unsubscribes from Surrender@20
 
         You can specify the categories you want to unsubscribe from or name none and unsubscribe from all.
@@ -95,6 +96,7 @@ class SurrenderAt20:
 
             # if nothing is specified, unsubscribe from everything
             if categories is None:
+                categories = "all categories"
                 await db.execute("DELETE FROM SurrenderAt20Subscriptions WHERE Guild=?", (ctx.guild.id,))
                 await db.commt()
             else:
@@ -192,17 +194,36 @@ class SurrenderAt20:
     @surrenderat20.command(name="list")
     async def _list(self, ctx):
         """Displays a list of all Keywords"""
-        names = ""
+        keywords = ""
+        categories = ""
         async with aiosqlite.connect("data.db") as db:
+            # get all subscribed categories of the guild
+            cursor = await db.execute("SELECT * FROM SurrenderAt20Subscriptions WHERE Guild=?", (ctx.guild.id,))
+            subscriptions = cursor.fetchone()
+            await cursor.close()
+
+            if subscriptions[1] == 1:
+                categories = categories + "Red Posts\n"
+            if subscriptions[2] == 1:
+                categories = categories + "PBE\n"
+            if subscriptions[3] == 1:
+                categories = categories + "Rotations\n"
+            if subscriptions[4] == 1:
+                categories = categories + "Esports\n"
+            if subscriptions[5] == 1:
+                categories = categories + "Releases\n"
+
             # get all keywords of the guild
             cursor = await db.execute("SELECT Keyword FROM Keywords WHERE Guild=?", (ctx.guild.id,))
 
             async for row in cursor:
-                names = names + row[0] + "\n"
+                keywords = keywords + row[0] + "\n"
             await cursor.close()
 
         # create message embed and send it
-        emb = discord.Embed(title="SurrenderNow keywords", color=discord.Colour.orange(), description=names)
+        emb = discord.Embed(title="Surrender@20 subscriptions", color=discord.Colour.orange())
+        emb.add_field(name="Categories", value=categories)
+        emb.add_field(name="Keywords", value=keywords)
         await ctx.send(embed=emb)
 
 
