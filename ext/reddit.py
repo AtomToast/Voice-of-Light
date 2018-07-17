@@ -6,7 +6,7 @@ import datetime
 import asyncio
 
 
-async def callback(result):
+def callback(result):
         print(result)
         print(result.exception())
 
