@@ -4,6 +4,7 @@ from discord.ext import commands
 import aiosqlite
 import datetime
 import asyncio
+import auth_token
 
 
 def callback(result):
@@ -29,11 +30,15 @@ class Reddit:
                 subreddits = await db.execute("SELECT * FROM Subreddits")
                 async for row in subreddits:
                     parsingChannelUrl = f"https://www.reddit.com/r/{row[1]}/new.json"
-                    parsingChannelHeader = {'cache-control': "no-cache"}
+                    parsingChannelHeader = {'cache-control': "no-cache", "User-Agent": auth_token.user_agent}
                     parsingChannelQueryString = {"sort": "new", "limit": "1"}
                     async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader,
                                                     params=parsingChannelQueryString) as resp:
-                        submissions_obj = await resp.json()
+                        try:
+                            submissions_obj = await resp.json()
+                        except Exception:
+                            print(await resp.text())
+                            raise Exception
 
                     submission_data = submissions_obj["data"]["children"][0]["data"]
 
