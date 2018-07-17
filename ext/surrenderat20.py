@@ -74,7 +74,7 @@ class SurrenderAt20:
 
                 # enter information into database
                 await db.execute("UPDATE SurrenderAt20Subscriptions \
-                                  SET RedPosts=?, PBE=?, Rotations=?, Esports=?, Releases=?) \
+                                  SET RedPosts=?, PBE=?, Rotations=?, Esports=?, Releases=? \
                                   WHERE Guild=?",
                                  (redposts, pbe, rotations, esports, releases, ctx.guild.id))
                 await db.commit()
@@ -139,7 +139,7 @@ class SurrenderAt20:
             if categories is None:
                 categories = "all categories"
                 await db.execute("DELETE FROM SurrenderAt20Subscriptions WHERE Guild=?", (ctx.guild.id,))
-                await db.commt()
+                await db.commit()
             else:
                 categories = categories.lower()
                 # return error if no categories are no found but they are also not None
@@ -163,7 +163,7 @@ class SurrenderAt20:
 
                 # enter information into database
                 await db.execute("UPDATE SurrenderAt20Subscriptions \
-                                  SET RedPosts=?, PBE=?, Rotations=?, Esports=?, Releases=?) \
+                                  SET RedPosts=?, PBE=?, Rotations=?, Esports=?, Releases=? \
                                   WHERE Guild=?",
                                  (redposts, pbe, rotations, esports, releases, ctx.guild.id))
                 await db.commit()
@@ -243,19 +243,22 @@ class SurrenderAt20:
             subscriptions = await cursor.fetchone()
             await cursor.close()
 
-            if subscriptions[1] == 1:
-                categories = categories + "Red Posts\n"
-            if subscriptions[2] == 1:
-                categories = categories + "PBE\n"
-            if subscriptions[3] == 1:
-                categories = categories + "Rotations\n"
-            if subscriptions[4] == 1:
-                categories = categories + "Esports\n"
-            if subscriptions[5] == 1:
-                categories = categories + "Releases\n"
-
-            if categories == "":
+            if subscriptions is None:
                 categories = "-"
+            else:
+                if subscriptions[1] == 1:
+                    categories = categories + "Red Posts\n"
+                if subscriptions[2] == 1:
+                    categories = categories + "PBE\n"
+                if subscriptions[3] == 1:
+                    categories = categories + "Rotations\n"
+                if subscriptions[4] == 1:
+                    categories = categories + "Esports\n"
+                if subscriptions[5] == 1:
+                    categories = categories + "Releases\n"
+
+                if categories == "":
+                    categories = "-"
 
             # get all keywords of the guild
             cursor = await db.execute("SELECT Keyword FROM Keywords WHERE Guild=?", (ctx.guild.id,))
