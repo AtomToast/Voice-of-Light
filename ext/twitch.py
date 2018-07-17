@@ -29,6 +29,7 @@ class Twitch:
             # check if announcement channel is set up
             cursor = await db.execute("SELECT AnnounceChannelID FROM Guilds WHERE ID=?", (ctx.guild.id,))
             row = await cursor.fetchall()
+            await cursor.close()
             if len(row) == 0:
                 await ctx.send("You need to set up a notifications channel before subscribing to any channels")
                 return

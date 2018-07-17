@@ -6,13 +6,19 @@ import datetime
 import asyncio
 
 
+async def callback(result):
+        print(result)
+        print(result.exception())
+
+
 class Reddit:
     """Add or remove subreddits to announce new posts of"""
     def __init__(self, bot):
         self.bot = bot
 
         # create polling background task
-        self.bot.reddit_poller = self.bot.loop.create_task(self.poll())
+        self.reddit_poller = self.bot.loop.create_task(self.poll())
+        self.reddit_poller.add_done_callback(callback)
 
     async def poll(self):
         await self.bot.wait_until_ready()
@@ -42,7 +48,7 @@ class Reddit:
                         emb = discord.Embed(title=submission_data["title"],
                                             color=discord.Colour.dark_blue(),
                                             url="https://www.reddit.com" + submission_data["permalink"])
-                        emb.timestamp = datetime.datetime.now()
+                        emb.timestamp = datetime.datetime.utcnow()
                         emb.set_author(name=submission_data["author"])
 
                         # if post content is very big, trim it
@@ -62,6 +68,7 @@ class Reddit:
 
                         async for ch in channels:
                             announceChannel = self.bot.get_channel(ch[0])
+                            print("Reddit post channel: " + announceChannel)
                             await announceChannel.send("A new post in /r/" + row[1] + " !", embed=emb)
 
                         await channels.close()
@@ -87,6 +94,7 @@ class Reddit:
             # check if announcement channel is set up
             cursor = await db.execute("SELECT AnnounceChannelID FROM Guilds WHERE ID=?", (ctx.guild.id,))
             row = await cursor.fetchall()
+            await cursor.close()
             if len(row) == 0:
                 await ctx.send("You need to set up a notifications channel before subscribing to any subreddits")
                 return
