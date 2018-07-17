@@ -68,7 +68,7 @@ class Reddit:
 
                         async for ch in channels:
                             announceChannel = self.bot.get_channel(ch[0])
-                            print("Reddit post channel: " + announceChannel)
+                            print("Reddit post channel: " + announceChannel.name + " - " + str(announceChannel.id))
                             await announceChannel.send("A new post in /r/" + row[1] + " !", embed=emb)
 
                         await channels.close()
