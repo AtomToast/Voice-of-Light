@@ -232,7 +232,7 @@ class SurrenderAt20:
         async with aiosqlite.connect("data.db") as db:
             # get all subscribed categories of the guild
             cursor = await db.execute("SELECT * FROM SurrenderAt20Subscriptions WHERE Guild=?", (ctx.guild.id,))
-            subscriptions = cursor.fetchone()
+            subscriptions = await cursor.fetchone()
             await cursor.close()
 
             if subscriptions[1] == 1:
@@ -246,12 +246,18 @@ class SurrenderAt20:
             if subscriptions[5] == 1:
                 categories = categories + "Releases\n"
 
+            if categories == "":
+                categories = "-"
+
             # get all keywords of the guild
             cursor = await db.execute("SELECT Keyword FROM Keywords WHERE Guild=?", (ctx.guild.id,))
 
             async for row in cursor:
                 keywords = keywords + row[0] + "\n"
             await cursor.close()
+
+            if keywords == "":
+                keywords = "-"
 
         # create message embed and send it
         emb = discord.Embed(title="Surrender@20 subscriptions", color=discord.Colour.orange())
