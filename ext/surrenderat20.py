@@ -16,7 +16,7 @@ class SurrenderAt20:
     async def surrenderat20(self, ctx):
         """Subscribe to Surrender@20 posts and search for keywords in posts."""
         if ctx.invoked_subcommand is None:
-            await ctx.send("You need to specify an action \n(use 'help surrendernow' for more information)")
+            await ctx.send("You need to specify an action \n(use 'help surrenderat20' for more information)")
 
     @surrenderat20.command(aliases=["sub"])
     async def subscribe(self, ctx, *, categories=None):
