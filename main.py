@@ -1,6 +1,8 @@
 import discord
 from discord.ext import commands
 
+import traceback
+import sys
 import logging
 import aiosqlite
 import auth_token
@@ -55,6 +57,32 @@ async def on_guild_remove(guild):
         await db.execute("DELETE FROM SurrenderAt20Subscriptions WHERE Guild=?", (guild.id,))
         await db.commit()
     print(f"<< Left {guild.name}")
+
+
+@bot.event
+async def on_command_error(ctx, error):
+    # This prevents any commands with local handlers being handled here in on_command_error.
+    if hasattr(ctx.command, 'on_error'):
+        return
+
+    ignored = (commands.CommandNotFound, commands.UserInputError)
+
+    # Allows us to check for original exceptions raised and sent to CommandInvokeError.
+    # If nothing is found. We keep the exception passed to on_command_error.
+    error = getattr(error, 'original', error)
+
+    # Anything in ignored will return and prevent anything happening.
+    if isinstance(error, ignored):
+        return
+
+    elif isinstance(error, commands.NoPrivateMessage):
+            try:
+                return await ctx.author.send(f'{ctx.command} can not be used in Private Messages.')
+            except Exception:
+                pass
+
+    print('Ignoring exception in command {}:'.format(ctx.command), file=sys.stderr)
+    traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
 
 
 # bot shutdown
