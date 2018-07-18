@@ -44,7 +44,7 @@ class Youtube:
 
         async with aiosqlite.connect("data.db") as db:
             # add channel id for the guild to the database
-            await db.execute("UPDATE Guilds SET YoutubeChannel=? WHERE ID=?",
+            await db.execute("UPDATE Guilds SET YoutubeNotifChannel=? WHERE ID=?",
                              (channel_obj.id, ctx.guild.id))
             await db.commit()
 
@@ -59,7 +59,7 @@ class Youtube:
         Use "~onlystreams" in order to ignore videos of this channel"""
         async with aiosqlite.connect("data.db") as db:
             # check if announcement channel is set up
-            cursor = await db.execute("SELECT YoutubeChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
+            cursor = await db.execute("SELECT YoutubeNotifChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
             row = await cursor.fetchall()
             await cursor.close()
             if len(row) == 0 or row[0][0] is None:

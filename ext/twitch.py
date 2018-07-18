@@ -43,7 +43,7 @@ class Twitch:
 
         async with aiosqlite.connect("data.db") as db:
             # add channel id for the guild to the database
-            await db.execute("UPDATE Guilds SET TwitchChannel=? WHERE ID=?",
+            await db.execute("UPDATE Guilds SET TwitchNotifChannel=? WHERE ID=?",
                              (channel_obj.id, ctx.guild.id))
             await db.commit()
 
@@ -56,7 +56,7 @@ class Twitch:
         Its livestreams will be announced in the specified channel"""
         async with aiosqlite.connect("data.db") as db:
             # check if announcement channel is set up
-            cursor = await db.execute("SELECT TwitchChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
+            cursor = await db.execute("SELECT TwitchNotifChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
             row = await cursor.fetchall()
             await cursor.close()
             if len(row) == 0 or row[0][0] is None:

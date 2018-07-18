@@ -67,7 +67,7 @@ class Reddit:
                             emb.set_image(url=submission_data["thumbnail"])
 
                         # send notification to every subscribed server
-                        channels = await db.execute("SELECT Guilds.RedditChannel \
+                        channels = await db.execute("SELECT Guilds.RedditNotifChannel \
                                                      FROM SubredditSubscriptions INNER JOIN Guilds \
                                                      ON SubredditSubscriptions.Guild=Guilds.ID \
                                                      WHERE Subreddit=?", (row[0],))
@@ -113,7 +113,7 @@ class Reddit:
 
         async with aiosqlite.connect("data.db") as db:
             # add channel id for the guild to the database
-            await db.execute("UPDATE Guilds SET RedditChannel=? WHERE ID=?",
+            await db.execute("UPDATE Guilds SET RedditNotifChannel=? WHERE ID=?",
                              (channel_obj.id, ctx.guild.id))
             await db.commit()
 
