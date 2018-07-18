@@ -18,6 +18,35 @@ class SurrenderAt20:
         if ctx.invoked_subcommand is None:
             await ctx.send("You need to specify an action \n(use 'help surrenderat20' for more information)")
 
+    @surrenderat20.command()
+    async def setchannel(self, ctx, channel=None):
+        """Sets the channel to announce Surrender@20 posts in"""
+        # get channel obj, depending on if it was mentioned or just the name was specified
+        if len(ctx.message.channel_mentions) > 0:
+            channel_obj = ctx.message.channel_mentions[0]
+        elif channel is not None:
+            channel_obj = discord.utils.get(ctx.guild.channels, name=channel.replace("#", ""))
+            if channel_obj is None:
+                await ctx.send(f"No channel named {channel}")
+                return
+        else:
+            await ctx.send("Missing channel parameter")
+            return
+
+        bot_id = ctx.guild.get_member(self.bot.user.id)
+        permissions = channel_obj.permissions_for(bot_id)
+        if not permissions.send_messages or not permissions.embed_links:
+            await ctx.send("Command failed, please make sure that the bot has both permissions for sending messages and using embeds in the specified channel!")
+            return
+
+        async with aiosqlite.connect("data.db") as db:
+            # add channel id for the guild to the database
+            await db.execute("UPDATE Guilds SET SurrenderAt20Channel=? WHERE ID=?",
+                             (channel_obj.id, ctx.guild.id))
+            await db.commit()
+
+        await ctx.send("Successfully set Surrender@20 notifications to " + channel_obj.mention)
+
     @surrenderat20.command(aliases=["sub"])
     async def subscribe(self, ctx, *, categories=None):
         """Subscribes to Surrender@20
@@ -32,11 +61,11 @@ class SurrenderAt20:
         - Releases"""
         async with aiosqlite.connect("data.db") as db:
             # check if announcement channel is set up
-            cursor = await db.execute("SELECT AnnounceChannelID FROM Guilds WHERE ID=?", (ctx.guild.id,))
+            cursor = await db.execute("SELECT SurrenderAt20Channel FROM Guilds WHERE ID=?", (ctx.guild.id,))
             row = await cursor.fetchall()
             await cursor.close()
-            if len(row) == 0:
-                await ctx.send("You need to set up a notifications channel before subscribing to anything")
+            if len(row) == 0 or row[0][0] is None:
+                await ctx.send("You need to set up a notifications channel before subscribing! \nUse either ;setchannel or ;surrenderat20 setchannel")
                 return
 
             n = await db.execute("SELECT * FROM SurrenderAt20Subscriptions WHERE Guild=?", (ctx.guild.id,))

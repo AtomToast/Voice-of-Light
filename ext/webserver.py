@@ -170,7 +170,7 @@ class Webserver:
                     return web.Response()
 
             # send messages in all subscribed servers
-            cursor = await db.execute("SELECT Guilds.AnnounceChannelID, YoutubeSubscriptions.OnlyStreams \
+            cursor = await db.execute("SELECT Guilds.YoutubeChannel, YoutubeSubscriptions.OnlyStreams \
                                        FROM YoutubeSubscriptions INNER JOIN Guilds \
                                        ON YoutubeSubscriptions.Guild=Guilds.ID \
                                        WHERE YoutubeChannel=?", (obj["feed"]["entry"]["yt:channelId"],))
@@ -248,7 +248,7 @@ class Webserver:
                 return web.Response()
 
             # sending messages to all subscribed servers
-            cursor = await db.execute("SELECT Guilds.AnnounceChannelID \
+            cursor = await db.execute("SELECT Guilds.TwitchChannel \
                                        FROM TwitchSubscriptions INNER JOIN Guilds \
                                        ON TwitchSubscriptions.Guild=Guilds.ID \
                                        WHERE TwitchChannel=?", (data["user_id"],))
@@ -340,7 +340,7 @@ class Webserver:
                         guild_emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value="\n\n".join(extracts), inline=False)
                 await keywords.close()
 
-                channels = await db.execute("SELECT AnnounceChannelID FROM Guilds WHERE ID=?", (guild_subscriptions[0],))
+                channels = await db.execute("SELECT SurrenderAt20Channel FROM Guilds WHERE ID=?", (guild_subscriptions[0],))
                 channel_id = await channels.fetchone()
                 channel = self.bot.get_channel(channel_id[0])
                 await channel.send("New Surrender@20 post!", embed=guild_emb)

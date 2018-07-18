@@ -14,7 +14,10 @@ class Utils:
     @commands.guild_only()
     @commands.command()
     async def setchannel(self, ctx, channel=None):
-        """Sets the channel to announce the notifications in"""
+        """Sets the standard channel to announce all the notifications in
+
+        Note that if you want certain things announced in unique channels you have to set them seperately for those!
+        e.g. ;surrenderat20 setchannel #surrender20-feed"""
         # get channel obj, depending on if it was mentioned or just the name was specified
         if len(ctx.message.channel_mentions) > 0:
             channel_obj = ctx.message.channel_mentions[0]
@@ -27,12 +30,19 @@ class Utils:
             await ctx.send("Missing channel parameter")
             return
 
+        bot_id = ctx.guild.get_member(self.bot.user.id)
+        permissions = channel_obj.permissions_for(bot_id)
+        if not permissions.send_messages or not permissions.embed_links:
+            await ctx.send("Command failed, please make sure that the bot has both permissions for sending messages and using embeds in the specified channel!")
+            return
+
         async with aiosqlite.connect("data.db") as db:
             # add channel id for the guild to the database
-            await db.execute("UPDATE Guilds SET AnnounceChannelID=? WHERE ID=?", (channel_obj.id, ctx.guild.id))
+            await db.execute("UPDATE Guilds SET SurrenderAt20Channel=?, TwitchChannel=?, YoutubeChannel=?, RedditChannel=? WHERE ID=?",
+                             (channel_obj.id, channel_obj.id, channel_obj.id, channel_obj.id, ctx.guild.id))
             await db.commit()
 
-        await ctx.send("Successfully set notifications channel to " + channel_obj.mention)
+        await ctx.send("Successfully set all notifications to " + channel_obj.mention)
 
     @commands.command()
     async def invite(self, ctx):
