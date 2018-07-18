@@ -63,17 +63,17 @@ class Reddit:
                             emb.description = submission_data["selftext"]
 
                         if submission_data["thumbnail"] != "self" and "_" not in submission_data["thumbnail"]:
+                            print(submission_data["thumbnail"])
                             emb.set_image(url=submission_data["thumbnail"])
 
                         # send notification to every subscribed server
-                        channels = await db.execute("SELECT Guilds.AnnounceChannelID \
+                        channels = await db.execute("SELECT Guilds.RedditChannel \
                                                      FROM SubredditSubscriptions INNER JOIN Guilds \
                                                      ON SubredditSubscriptions.Guild=Guilds.ID \
                                                      WHERE Subreddit=?", (row[0],))
 
                         async for ch in channels:
                             announceChannel = self.bot.get_channel(ch[0])
-                            print("Reddit post channel: " + announceChannel.name + " - " + str(announceChannel.id))
                             await announceChannel.send("A new post in /r/" + row[1] + " !", embed=emb)
 
                         await channels.close()
@@ -90,6 +90,35 @@ class Reddit:
         if ctx.invoked_subcommand is None:
             await ctx.send("You need to specify an action \n(use 'help reddit' for more information)")
 
+    @reddit.command()
+    async def setchannel(self, ctx, channel=None):
+        """Sets the channel to announce Reddit posts in"""
+        # get channel obj, depending on if it was mentioned or just the name was specified
+        if len(ctx.message.channel_mentions) > 0:
+            channel_obj = ctx.message.channel_mentions[0]
+        elif channel is not None:
+            channel_obj = discord.utils.get(ctx.guild.channels, name=channel.replace("#", ""))
+            if channel_obj is None:
+                await ctx.send(f"No channel named {channel}")
+                return
+        else:
+            await ctx.send("Missing channel parameter")
+            return
+
+        bot_id = ctx.guild.get_member(self.bot.user.id)
+        permissions = channel_obj.permissions_for(bot_id)
+        if not permissions.send_messages or not permissions.embed_links:
+            await ctx.send("Command failed, please make sure that the bot has both permissions for sending messages and using embeds in the specified channel!")
+            return
+
+        async with aiosqlite.connect("data.db") as db:
+            # add channel id for the guild to the database
+            await db.execute("UPDATE Guilds SET RedditChannel=? WHERE ID=?",
+                             (channel_obj.id, ctx.guild.id))
+            await db.commit()
+
+        await ctx.send("Successfully set Reddit notifications to " + channel_obj.mention)
+
     @reddit.command(aliases=["sub"])
     async def subscribe(self, ctx, *, subreddit=None):
         """Subscribes to a subreddit
@@ -97,11 +126,11 @@ class Reddit:
         Its new posts will be announced in the specified channel"""
         async with aiosqlite.connect("data.db") as db:
             # check if announcement channel is set up
-            cursor = await db.execute("SELECT AnnounceChannelID FROM Guilds WHERE ID=?", (ctx.guild.id,))
+            cursor = await db.execute("SELECT RedditChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
             row = await cursor.fetchall()
             await cursor.close()
-            if len(row) == 0:
-                await ctx.send("You need to set up a notifications channel before subscribing to any subreddits")
+            if len(row) == 0 or row[0][0] is None:
+                await ctx.send("You need to set up a notifications channel before subscribing! \nUse either ;setchannel or ;surrenderat20 setchannel")
                 return
 
         if subreddit is None:
