@@ -2,12 +2,16 @@ import discord
 from discord.ext import commands
 
 import aiosqlite
+import auth_token
+import datetime
+import re
 
 
 class SurrenderAt20:
     """Add or remove keywords to annouce from surrender@20 posts"""
     def __init__(self, bot):
         self.bot = bot
+        self.cleanr = re.compile('<.*?>')
 
     # who and where the commands are permitted to use
     @commands.has_permissions(manage_messages=True)
@@ -41,7 +45,7 @@ class SurrenderAt20:
 
         async with aiosqlite.connect("data.db") as db:
             # add channel id for the guild to the database
-            await db.execute("UPDATE Guilds SET SurrenderAt20Channel=? WHERE ID=?",
+            await db.execute("UPDATE Guilds SET SurrenderAtNotif20Channel=? WHERE ID=?",
                              (channel_obj.id, ctx.guild.id))
             await db.commit()
 
@@ -61,7 +65,7 @@ class SurrenderAt20:
         - Releases"""
         async with aiosqlite.connect("data.db") as db:
             # check if announcement channel is set up
-            cursor = await db.execute("SELECT SurrenderAt20Channel FROM Guilds WHERE ID=?", (ctx.guild.id,))
+            cursor = await db.execute("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
             row = await cursor.fetchall()
             await cursor.close()
             if len(row) == 0 or row[0][0] is None:
@@ -304,6 +308,66 @@ class SurrenderAt20:
         emb.add_field(name="Categories", value=categories)
         emb.add_field(name="Keywords", value=keywords)
         await ctx.send(embed=emb)
+
+    @surrenderat20.command()
+    async def latest(self, ctx):
+        """Sends the lastest Post"""
+        parsingChannelUrl = "https://www.googleapis.com/blogger/v3/blogs/8141971962311514602/posts"
+        parsingChannelQueryString = {"key": auth_token.google, "fields": "items"}
+        async with self.bot.session.get(parsingChannelUrl, params=parsingChannelQueryString) as resp:
+            posts = await resp.json()
+        item = posts["items"][0]
+        content = item["content"]
+
+        emb = discord.Embed(title=item["title"],
+                            color=discord.Colour.orange(),
+                            description=" ".join(item["labels"]),
+                            url=item["url"],
+                            timestamp=datetime.datetime.utcnow())
+        emb.set_thumbnail(url="https://images-ext-2.discordapp.net/external/p4GLboECWMVLnDH-Orv6nkWm3OG8uLdI2reNRQ9RX74/http/3.bp.blogspot.com/-M_ecJWWc5CE/Uizpk6U3lwI/AAAAAAAACLo/xyh6eQNRzzs/s640/sitethumb.jpg")
+        if item["author"]["displayName"] == "Aznbeat":
+            author_img = "https://images-ext-2.discordapp.net/external/HI8rRYejC0QYULMmoDBTcZgJ52U0Msvwj9JmUxd-JAI/https/disqus.com/api/users/avatars/Aznbeat.jpg"
+        else:
+            author_img = "https://images-ext-2.discordapp.net/external/t0bRQzNtKHoIDcFcj2X8R0O0UPqeeyKdvawNbVMoHXE/https/disqus.com/api/users/avatars/Moobeat.jpg"
+        emb.set_author(name=item["author"]["displayName"], icon_url=author_img)
+
+        startImgPos = content.find('<img', 0, len(content)) + 4
+        if(startImgPos > -1):
+            endImgPos = content.find('>', startImgPos, len(content))
+            imageTag = content[startImgPos:endImgPos]
+            startSrcPos = imageTag.find('src="', 0, len(content)) + 5
+            endSrcPos = imageTag.find('"', startSrcPos, len(content))
+            linkTag = imageTag[startSrcPos:endSrcPos]
+
+            emb.set_image(url=linkTag)
+
+        async with aiosqlite.connect("data.db") as db:
+            keywords = await db.execute("SELECT Keyword FROM Keywords WHERE Guild=?", (ctx.guild.id,))
+            async for keyword in keywords:
+                kw = " " + keyword[0] + " "
+                # check if keyword appears in post
+                brokentext = content.replace("<br />", "\n")
+                cleantext = re.sub(self.cleanr, '', brokentext).replace("&nbsp;", " ")
+                if kw in cleantext.lower():
+                    extracts = []
+                    # find paragraphs with keyword
+                    for part in cleantext.split("\n\n"):
+                        if kw in part.lower():
+                            extracts.append(part.strip())
+
+                    # create message embed and send it to the server
+                    exctrats_string = "\n\n".join(extracts)
+                    if len(exctrats_string) > 950:
+                        exctrats_string = exctrats_string[:950] + "... `" + str(cleantext.lower().count(kw)) + "` mentions in total"
+
+                    emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value=exctrats_string, inline=False)
+            await keywords.close()
+
+            channels = await db.execute("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
+            channel_id = await channels.fetchone()
+            channel = self.bot.get_channel(channel_id[0])
+            await channel.send("New Surrender@20 post!", embed=emb)
+        await ctx.send("Sent latest post into " + channel.mention)
 
 
 def setup(bot):

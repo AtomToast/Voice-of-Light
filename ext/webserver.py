@@ -170,7 +170,7 @@ class Webserver:
                     return web.Response()
 
             # send messages in all subscribed servers
-            cursor = await db.execute("SELECT Guilds.YoutubeChannel, YoutubeSubscriptions.OnlyStreams \
+            cursor = await db.execute("SELECT Guilds.YoutubeNotifChannel, YoutubeSubscriptions.OnlyStreams \
                                        FROM YoutubeSubscriptions INNER JOIN Guilds \
                                        ON YoutubeSubscriptions.Guild=Guilds.ID \
                                        WHERE YoutubeChannel=?", (obj["feed"]["entry"]["yt:channelId"],))
@@ -248,7 +248,7 @@ class Webserver:
                 return web.Response()
 
             # sending messages to all subscribed servers
-            cursor = await db.execute("SELECT Guilds.TwitchChannel \
+            cursor = await db.execute("SELECT Guilds.TwitchNotifChannel \
                                        FROM TwitchSubscriptions INNER JOIN Guilds \
                                        ON TwitchSubscriptions.Guild=Guilds.ID \
                                        WHERE TwitchChannel=?", (data["user_id"],))
@@ -281,7 +281,7 @@ class Webserver:
             content = item["content"]
         except KeyError:
             parsingChannelUrl = "https://www.googleapis.com/blogger/v3/blogs/8141971962311514602/posts/" + item["id"][-19:]
-            parsingChannelQueryString = {"key": auth_token.google}
+            parsingChannelQueryString = {"key": auth_token.google, "fields": "content"}
             async with self.bot.session.get(parsingChannelUrl, params=parsingChannelQueryString) as resp:
                 post_obj = await resp.json()
             content = post_obj["content"]
@@ -334,13 +334,13 @@ class Webserver:
 
                         # create message embed and send it to the server
                         exctrats_string = "\n\n".join(extracts)
-                        if len(exctrats_string) > 2000:
-                            exctrats_string = exctrats_string[:2000] + "... `" + str(cleantext) + "` mentions in total"
+                        if len(exctrats_string) > 950:
+                            exctrats_string = exctrats_string[:950] + "... `" + str(cleantext.lower().count(kw)) + "` mentions in total"
 
-                        guild_emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value="\n\n".join(extracts), inline=False)
+                        guild_emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value=exctrats_string, inline=False)
                 await keywords.close()
 
-                channels = await db.execute("SELECT SurrenderAt20Channel FROM Guilds WHERE ID=?", (guild_subscriptions[0],))
+                channels = await db.execute("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=?", (guild_subscriptions[0],))
                 channel_id = await channels.fetchone()
                 channel = self.bot.get_channel(channel_id[0])
                 await channel.send("New Surrender@20 post!", embed=guild_emb)
