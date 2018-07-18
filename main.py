@@ -76,10 +76,22 @@ async def on_command_error(ctx, error):
         return
 
     elif isinstance(error, commands.NoPrivateMessage):
-            try:
-                return await ctx.author.send(f'{ctx.command} can not be used in Private Messages.')
-            except Exception:
-                pass
+        try:
+            return await ctx.author.send(f'{ctx.command} can not be used in Private Messages.')
+        except Exception:
+            pass
+
+    elif isinstance(error, commands.MissingPermissions):
+        try:
+            return await ctx.author.send('You lack permissions for this this command.')
+        except Exception:
+            pass
+
+    elif isinstance(error, commands.BotMissingPermissions):
+        try:
+            return await ctx.author.send("The bot lacks the permissions: " + " ".join(error.missing_perms))
+        except Exception:
+            pass
 
     print('Ignoring exception in command {}:'.format(ctx.command), file=sys.stderr)
     traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
