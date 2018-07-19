@@ -27,7 +27,8 @@ class Webserver:
 
         # push notification run out after a specified time so I need to refresh them regularly
         self.scheduler = AsyncIOScheduler(event_loop=self.bot.loop)
-        self.scheduler.add_job(self.refresh_subscriptions, "interval", days=1, id="refresher", replace_existing=True)
+        self.scheduler.add_job(self.refresh_subscriptions, "interval", days=1, id="refresher", replace_existing=True, next_run_time=datetime.datetime.now())
+        self.scheduler.add_job(self.ping_feedburner, "interval", minutes=3, id="pinger", replace_existing=True)
         self.scheduler.start()
 
         # create the run task
@@ -70,15 +71,12 @@ class Webserver:
                         print(resp.text)
             await cursor.close()
 
-        # refresh surrenderat20 subscription
-        parsingChannelUrl = "https://pubsubhubbub.appspot.com/subscribe"
-        parsingChannelQueryString = {"hub.mode": "subscribe", "hub.callback": auth_token.server_url + "/surrenderat20",
-                                     "hub.topic": "https://feeds.feedburner.com/surrenderat20", "hub.lease_seconds": 864000}
-        async with self.bot.session.post(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
-            if resp.status != 202:
+    # pings feedburner to update feed
+    async def ping_feedburner(self):
+        parsingChannelUrl = "http://feedburner.google.com/fb/a/pingSubmit?bloglink=https%3A%2F%2Ffeeds.feedburner.com%2Fsurrenderat20%2FCqWw"
+        async with self.bot.session.get(parsingChannelUrl) as resp:
+            if resp.status != 200:
                 print(resp.text)
-
-        print("Refreshed Subscriptions")
 
     # handler for post requests to the /youtube route
     async def youtube(self, request):
@@ -362,7 +360,6 @@ class Webserver:
 
     # will verify surrenderat20 subscription
     async def surrenderat20verification(self, request):
-        print("subscription request got")
         return web.Response(text=request.query["hub.challenge"])
 
 
