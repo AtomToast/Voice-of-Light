@@ -34,6 +34,11 @@ class Reddit:
                     parsingChannelQueryString = {"sort": "new", "limit": "1"}
                     async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader,
                                                     params=parsingChannelQueryString) as resp:
+                        if resp.status > 400:
+                            print(resp.status)
+                            print(await resp.text())
+                            await asyncio.sleep(2)
+                            continue
                         try:
                             submissions_obj = await resp.json()
                         except Exception:
