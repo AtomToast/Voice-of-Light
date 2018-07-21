@@ -5,11 +5,8 @@ import aiosqlite
 import datetime
 import asyncio
 import auth_token
-
-
-def callback(result):
-        print(result)
-        print(result.exception())
+import traceback
+import sys
 
 
 class Reddit:
@@ -19,7 +16,6 @@ class Reddit:
 
         # create polling background task
         self.reddit_poller = self.bot.loop.create_task(self.poll())
-        self.reddit_poller.add_done_callback(callback)
 
     async def poll(self):
         await self.bot.wait_until_ready()
@@ -34,11 +30,11 @@ class Reddit:
                     parsingChannelQueryString = {"sort": "new", "limit": "1"}
                     async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader,
                                                     params=parsingChannelQueryString) as resp:
-                        try:
-                            submissions_obj = await resp.json()
-                        except Exception:
-                            print(await resp.text())
-                            raise Exception
+                        if resp.status > 400:
+                            await asyncio.sleep(2)
+                            continue
+
+                        submissions_obj = await resp.json()
 
                     submission_data = submissions_obj["data"]["children"][0]["data"]
 
@@ -62,8 +58,7 @@ class Reddit:
                         else:
                             emb.description = submission_data["selftext"]
 
-                        if submission_data["thumbnail"] != "self" and "_" not in submission_data["thumbnail"]:
-                            print(submission_data["thumbnail"])
+                        if submission_data["thumbnail"] not in ["self", "default", "nsfw"]:
                             emb.set_image(url=submission_data["thumbnail"])
 
                         # send notification to every subscribed server
@@ -74,7 +69,12 @@ class Reddit:
 
                         async for ch in channels:
                             announceChannel = self.bot.get_channel(ch[0])
-                            await announceChannel.send("A new post in /r/" + row[1] + " !", embed=emb)
+                            try:
+                                await announceChannel.send("A new post in /r/" + row[1] + " !", embed=emb)
+                            except Exception as ex:
+                                print('Ignoring exception in Reddit.poll()', file=sys.stderr)
+                                traceback.print_exception(type(ex), ex, ex.__traceback__, file=sys.stderr)
+                                pass
 
                         await channels.close()
 
@@ -126,7 +126,7 @@ class Reddit:
         Its new posts will be announced in the specified channel"""
         async with aiosqlite.connect("data.db") as db:
             # check if announcement channel is set up
-            cursor = await db.execute("SELECT RedditChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
+            cursor = await db.execute("SELECT RedditNotifChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
             row = await cursor.fetchall()
             await cursor.close()
             if len(row) == 0 or row[0][0] is None:
