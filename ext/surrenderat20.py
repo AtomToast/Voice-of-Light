@@ -319,6 +319,7 @@ class SurrenderAt20:
         item = posts["items"][0]
         content = item["content"]
 
+        # create message Embed
         emb = discord.Embed(title=item["title"],
                             color=discord.Colour.orange(),
                             description=" ".join(item["labels"]),
@@ -331,6 +332,7 @@ class SurrenderAt20:
             author_img = "https://images-ext-2.discordapp.net/external/t0bRQzNtKHoIDcFcj2X8R0O0UPqeeyKdvawNbVMoHXE/https/disqus.com/api/users/avatars/Moobeat.jpg"
         emb.set_author(name=item["author"]["displayName"], icon_url=author_img)
 
+        # get first image in post
         startImgPos = content.find('<img', 0, len(content)) + 4
         if(startImgPos > -1):
             endImgPos = content.find('>', startImgPos, len(content))
@@ -363,6 +365,7 @@ class SurrenderAt20:
                     emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value=exctrats_string, inline=False)
             await keywords.close()
 
+            # send post
             channels = await db.execute("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
             channel_id = await channels.fetchone()
             await channels.close()
