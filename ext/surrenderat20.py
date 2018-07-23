@@ -45,7 +45,7 @@ class SurrenderAt20:
 
         async with aiosqlite.connect("data.db") as db:
             # add channel id for the guild to the database
-            await db.execute("UPDATE Guilds SET SurrenderAtNotif20Channel=? WHERE ID=?",
+            await db.execute("UPDATE Guilds SET SurrenderAt20NotifChannel=? WHERE ID=?",
                              (channel_obj.id, ctx.guild.id))
             await db.commit()
 

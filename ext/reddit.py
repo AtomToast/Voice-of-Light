@@ -9,6 +9,12 @@ import traceback
 import sys
 
 
+def callback(result):
+        ex = result.exception()
+        print('Ignoring exception in Reddit.poll()', file=sys.stderr)
+        traceback.print_exception(type(ex), ex, ex.__traceback__, file=sys.stderr)
+
+
 class Reddit:
     """Add or remove subreddits to announce new posts of"""
     def __init__(self, bot):
@@ -16,6 +22,7 @@ class Reddit:
 
         # create polling background task
         self.reddit_poller = self.bot.loop.create_task(self.poll())
+        self.reddit_poller.add_done_callback(callback)
 
     async def poll(self):
         await self.bot.wait_until_ready()
@@ -34,7 +41,11 @@ class Reddit:
                             await asyncio.sleep(2)
                             continue
 
-                        submissions_obj = await resp.json()
+                        try:
+                            submissions_obj = await resp.json()
+                        except Exception:
+                            print(await resp.text())
+                            raise Exception
 
                     submission_data = submissions_obj["data"]["children"][0]["data"]
 
