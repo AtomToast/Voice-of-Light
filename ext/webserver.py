@@ -340,6 +340,7 @@ class Webserver:
 
                 channels = await db.execute("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=?", (guild_subscriptions[0],))
                 channel_id = await channels.fetchone()
+                await channels.close()
                 channel = self.bot.get_channel(channel_id[0])
                 await channel.send("New Surrender@20 post!", embed=guild_emb)
 

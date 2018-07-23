@@ -365,6 +365,7 @@ class SurrenderAt20:
 
             channels = await db.execute("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
             channel_id = await channels.fetchone()
+            await channels.close()
             channel = self.bot.get_channel(channel_id[0])
             await channel.send("New Surrender@20 post!", embed=emb)
         await ctx.send("Sent latest post into " + channel.mention)
