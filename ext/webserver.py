@@ -80,271 +80,282 @@ class Webserver:
 
     # handler for post requests to the /youtube route
     async def youtube(self, request):
-        obj = xmltodict.parse(await request.text())
-        # to check if the notification is about a video being deleted
         try:
-            # if the request contains a "at:deleted-entry" parameter it is
-            # otherwise a keyerror is raised which will be ignored to continue on normally
-            obj["feed"]["at:deleted-entry"]
+            obj = xmltodict.parse(await request.text())
+            # to check if the notification is about a video being deleted
+            try:
+                # if the request contains a "at:deleted-entry" parameter it is
+                # otherwise a keyerror is raised which will be ignored to continue on normally
+                obj["feed"]["at:deleted-entry"]
+                parsingChannelUrl = "https://www.googleapis.com/youtube/v3/channels"
+                parsingChannelQueryString = {"part": "statistics", "id": obj["feed"]["at:deleted-entry"]["at:by"]["uri"].split("/")[-1], "maxResults": "1",
+                                             "key": auth_token.google}
+                async with self.bot.session.get(parsingChannelUrl, params=parsingChannelQueryString) as resp:
+                    ch = await resp.json()
+                async with aiosqlite.connect("data.db") as db:
+                    await db.execute("UPDATE YoutubeChannels SET VideoCount=? WHERE ID=?", (int(ch["items"][0]["statistics"]["videoCount"]), ch["items"][0]["id"]))
+                    await db.commit()
+                return web.Response()
+            except KeyError:
+                pass
+
+            # getting the video data
+            parsingChannelUrl = "https://www.googleapis.com/youtube/v3/videos"
+            parsingChannelQueryString = {"part": "snippet", "id": obj["feed"]["entry"]["yt:videoId"], "maxResults": "1",
+                                         "key": auth_token.google}
+            async with self.bot.session.get(parsingChannelUrl, params=parsingChannelQueryString) as resp:
+                v = await resp.json()
+            if len(v["items"]) == 0:
+                # video not found, probably deleted already
+                return web.Response()
+            video = v["items"][0]["snippet"]
+
+            # getting channel data
             parsingChannelUrl = "https://www.googleapis.com/youtube/v3/channels"
-            parsingChannelQueryString = {"part": "statistics", "id": obj["feed"]["at:deleted-entry"]["at:by"]["uri"].split("/")[-1], "maxResults": "1",
+            parsingChannelQueryString = {"part": "snippet,statistics", "id": video["channelId"], "maxResults": "1",
                                          "key": auth_token.google}
             async with self.bot.session.get(parsingChannelUrl, params=parsingChannelQueryString) as resp:
                 ch = await resp.json()
+            channel_obj = ch["items"][0]
+
+            # creating message embed
+            emb = discord.Embed(title=video["title"],
+                                description=video["channelTitle"],
+                                url=obj["feed"]["entry"]["link"]["@href"],
+                                color=discord.Colour.red())
+            emb.timestamp = datetime.datetime.utcnow()
+            emb.set_image(url=video["thumbnails"]["default"]["url"])
+            emb.set_footer(icon_url=channel_obj["snippet"]["thumbnails"]["default"]["url"], text="Youtube")
+
+            # check if it's a video or a livestream
+            # if it is neither it is a livestream announcement which will be ignored
+            if video["liveBroadcastContent"] == "none":
+                announcement = "New Video live!"
+            elif video["liveBroadcastContent"] == "live":
+                announcement = video["channelTitle"] + " is now live!"
+            else:
+                return web.Response()
+
             async with aiosqlite.connect("data.db") as db:
-                await db.execute("UPDATE YoutubeChannels SET VideoCount=? WHERE ID=?", (int(ch["items"][0]["statistics"]["videoCount"]), ch["items"][0]["id"]))
-                await db.commit()
+                # if it is a livestream the bot shouldn't announce a livestream more than once in an hour
+                # to keep channels from getting spammed from stream restarts
+                if video["liveBroadcastContent"] == "live":
+                    cursor = await db.execute("SELECT LastLive FROM YoutubeChannels WHERE ID=?", (obj["feed"]["entry"]["yt:channelId"],))
+                    dt = await cursor.fetchall()
+                    await cursor.close()
+                    dt_str = dt[0][0]
+                    while len(dt_str.split("-")[0]) < 4:
+                        dt_str = "0" + dt_str
+                    if (datetime.datetime.utcnow() - datetime.datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')).total_seconds() > 60 * 60:
+                        await db.execute("UPDATE YoutubeChannels SET LastLive=? WHERE ID=?", (datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'), obj["feed"]["entry"]["yt:channelId"]))
+                        await db.commit()
+                    else:
+                        # stream was restarted
+                        return web.Response()
+                else:
+                    # youtube does not tell if the notification is about a new video
+                    # or edits to an old one
+                    # so this checks if it's a new video or just an edit
+                    cursor = await db.execute("SELECT LastVideoID, VideoCount FROM YoutubeChannels WHERE ID=?", (obj["feed"]["entry"]["yt:channelId"],))
+                    r = await cursor.fetchall()
+                    stats = r[0]
+                    await cursor.close()
+                    if obj["feed"]["entry"]["yt:videoId"] != stats[0] and int(channel_obj["statistics"]["videoCount"]) > stats[1]:
+                        await db.execute("UPDATE YoutubeChannels SET LastVideoID=?, VideoCount=? WHERE ID=?",
+                                         (obj["feed"]["entry"]["yt:videoId"], int(channel_obj["statistics"]["videoCount"]), obj["feed"]["entry"]["yt:channelId"]))
+                        await db.commit()
+                    else:
+                        # A video has been edited
+                        return web.Response()
+
+                # send messages in all subscribed servers
+                cursor = await db.execute("SELECT Guilds.YoutubeNotifChannel, YoutubeSubscriptions.OnlyStreams \
+                                           FROM YoutubeSubscriptions INNER JOIN Guilds \
+                                           ON YoutubeSubscriptions.Guild=Guilds.ID \
+                                           WHERE YoutubeChannel=?", (obj["feed"]["entry"]["yt:channelId"],))
+
+                async for row in cursor:
+                    # if the server set the subscription to "Only streams"
+                    # videos will not be announced
+                    if row[1] == 1 and video["liveBroadcastContent"] == "none":
+                        continue
+                    announceChannel = self.bot.get_channel(row[0])
+                    await announceChannel.send(announcement, embed=emb)
+
+                await cursor.close()
+        except Exception as ex:
+            raise ex
+        finally:
             return web.Response()
-        except KeyError:
-            pass
 
-        # getting the video data
-        parsingChannelUrl = "https://www.googleapis.com/youtube/v3/videos"
-        parsingChannelQueryString = {"part": "snippet", "id": obj["feed"]["entry"]["yt:videoId"], "maxResults": "1",
-                                     "key": auth_token.google}
-        async with self.bot.session.get(parsingChannelUrl, params=parsingChannelQueryString) as resp:
-            v = await resp.json()
-        if len(v["items"]) == 0:
-            # video not found, probably deleted already
-            return web.Response()
-        video = v["items"][0]["snippet"]
+    # handler for posts to the /twitch route
+    async def twitch(self, request):
+        try:
+            obj = await request.json()
+            # check if it's a "stream down" notification, it does not contain any content
+            if len(obj["data"]) == 0:
+                # stream down
+                return web.Response()
 
-        # getting channel data
-        parsingChannelUrl = "https://www.googleapis.com/youtube/v3/channels"
-        parsingChannelQueryString = {"part": "snippet,statistics", "id": video["channelId"], "maxResults": "1",
-                                     "key": auth_token.google}
-        async with self.bot.session.get(parsingChannelUrl, params=parsingChannelQueryString) as resp:
-            ch = await resp.json()
-        channel_obj = ch["items"][0]
+            data = obj["data"][0]
 
-        # creating message embed
-        emb = discord.Embed(title=video["title"],
-                            description=video["channelTitle"],
-                            url=obj["feed"]["entry"]["link"]["@href"],
-                            color=discord.Colour.red())
-        emb.timestamp = datetime.datetime.utcnow()
-        emb.set_image(url=video["thumbnails"]["default"]["url"])
-        emb.set_footer(icon_url=channel_obj["snippet"]["thumbnails"]["default"]["url"], text="Youtube")
+            # getting channel data
+            parsingChannelUrl = "https://api.twitch.tv/helix/users"
+            parsingChannelHeader = {'Client-ID': auth_token.twitch}
+            parsingChannelQueryString = {"id": data["user_id"]}
+            async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
+                channel_obj = await resp.json()
+            ch = channel_obj["data"][0]
 
-        # check if it's a video or a livestream
-        # if it is neither it is a livestream announcement which will be ignored
-        if video["liveBroadcastContent"] == "none":
-            announcement = "New Video live!"
-        elif video["liveBroadcastContent"] == "live":
-            announcement = video["channelTitle"] + " is now live!"
-        else:
-            return web.Response()
+            # getting game data
+            parsingChannelUrl = "https://api.twitch.tv/helix/games"
+            parsingChannelHeader = {'Client-ID': auth_token.twitch}
+            parsingChannelQueryString = {"id": data["game_id"]}
+            async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
+                game_obj = await resp.json()
 
-        async with aiosqlite.connect("data.db") as db:
-            # if it is a livestream the bot shouldn't announce a livestream more than once in an hour
-            # to keep channels from getting spammed from stream restarts
-            if video["liveBroadcastContent"] == "live":
-                cursor = await db.execute("SELECT LastLive FROM YoutubeChannels WHERE ID=?", (obj["feed"]["entry"]["yt:channelId"],))
+            # variables for game information
+            # if no game is specified a default will be chosen
+            if len(game_obj["data"]) == 0:
+                game_url = ""
+                game_name = "a game"
+            else:
+                ga = game_obj["data"][0]
+                game_url = ga["box_art_url"].format(width=300, height=300)
+                game_name = ga["name"]
+
+            # creation of the message embed
+            emb = discord.Embed(title=data["title"],
+                                description=ch["display_name"],
+                                url="https://www.twitch.tv/" + ch["login"],
+                                color=discord.Colour.purple())
+            emb.timestamp = datetime.datetime.utcnow()
+            emb.set_image(url=data["thumbnail_url"].format(width=320, height=180))
+            emb.set_footer(icon_url=ch["profile_image_url"], text="Twitch")
+            emb.set_thumbnail(url=game_url)
+
+            async with aiosqlite.connect("data.db") as db:
+                # streams should only be announced every hour
+                # to keep channels from getting spammed with stream restarts
+                cursor = await db.execute("SELECT LastLive FROM TwitchChannels WHERE ID=?", (ch["id"],))
                 dt = await cursor.fetchall()
                 await cursor.close()
                 dt_str = dt[0][0]
                 while len(dt_str.split("-")[0]) < 4:
                     dt_str = "0" + dt_str
                 if (datetime.datetime.utcnow() - datetime.datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')).total_seconds() > 60 * 60:
-                    await db.execute("UPDATE YoutubeChannels SET LastLive=? WHERE ID=?", (datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'), obj["feed"]["entry"]["yt:channelId"]))
+                    await db.execute("UPDATE TwitchChannels SET LastLive=? WHERE ID=?", (datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'), ch["id"]))
                     await db.commit()
                 else:
                     # stream was restarted
                     return web.Response()
-            else:
-                # youtube does not tell if the notification is about a new video
-                # or edits to an old one
-                # so this checks if it's a new video or just an edit
-                cursor = await db.execute("SELECT LastVideoID, VideoCount FROM YoutubeChannels WHERE ID=?", (obj["feed"]["entry"]["yt:channelId"],))
-                r = await cursor.fetchall()
-                stats = r[0]
+
+                # sending messages to all subscribed servers
+                cursor = await db.execute("SELECT Guilds.TwitchNotifChannel \
+                                           FROM TwitchSubscriptions INNER JOIN Guilds \
+                                           ON TwitchSubscriptions.Guild=Guilds.ID \
+                                           WHERE TwitchChannel=?", (data["user_id"],))
+
+                async for row in cursor:
+                    announceChannel = self.bot.get_channel(row[0])
+                    await announceChannel.send(ch["display_name"] + " is now live with " + game_name + " !", embed=emb)
+
                 await cursor.close()
-                if obj["feed"]["entry"]["yt:videoId"] != stats[0] and int(channel_obj["statistics"]["videoCount"]) > stats[1]:
-                    await db.execute("UPDATE YoutubeChannels SET LastVideoID=?, VideoCount=? WHERE ID=?",
-                                     (obj["feed"]["entry"]["yt:videoId"], int(channel_obj["statistics"]["videoCount"]), obj["feed"]["entry"]["yt:channelId"]))
-                    await db.commit()
-                else:
-                    # A video has been edited
-                    return web.Response()
-
-            # send messages in all subscribed servers
-            cursor = await db.execute("SELECT Guilds.YoutubeNotifChannel, YoutubeSubscriptions.OnlyStreams \
-                                       FROM YoutubeSubscriptions INNER JOIN Guilds \
-                                       ON YoutubeSubscriptions.Guild=Guilds.ID \
-                                       WHERE YoutubeChannel=?", (obj["feed"]["entry"]["yt:channelId"],))
-
-            async for row in cursor:
-                # if the server set the subscription to "Only streams"
-                # videos will not be announced
-                if row[1] == 1 and video["liveBroadcastContent"] == "none":
-                    continue
-                announceChannel = self.bot.get_channel(row[0])
-                await announceChannel.send(announcement, embed=emb)
-
-            await cursor.close()
-        return web.Response()
-
-    # handler for posts to the /twitch route
-    async def twitch(self, request):
-        obj = await request.json()
-        # check if it's a "stream down" notification, it does not contain any content
-        if len(obj["data"]) == 0:
-            # stream down
+        except Exception as ex:
+            raise ex
+        finally:
             return web.Response()
-
-        data = obj["data"][0]
-
-        # getting channel data
-        parsingChannelUrl = "https://api.twitch.tv/helix/users"
-        parsingChannelHeader = {'Client-ID': auth_token.twitch}
-        parsingChannelQueryString = {"id": data["user_id"]}
-        async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
-            channel_obj = await resp.json()
-        ch = channel_obj["data"][0]
-
-        # getting game data
-        parsingChannelUrl = "https://api.twitch.tv/helix/games"
-        parsingChannelHeader = {'Client-ID': auth_token.twitch}
-        parsingChannelQueryString = {"id": data["game_id"]}
-        async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
-            game_obj = await resp.json()
-
-        # variables for game information
-        # if no game is specified a default will be chosen
-        if len(game_obj["data"]) == 0:
-            game_url = ""
-            game_name = "a game"
-        else:
-            ga = game_obj["data"][0]
-            game_url = ga["box_art_url"].format(width=300, height=300)
-            game_name = ga["name"]
-
-        # creation of the message embed
-        emb = discord.Embed(title=data["title"],
-                            description=ch["display_name"],
-                            url="https://www.twitch.tv/" + ch["login"],
-                            color=discord.Colour.purple())
-        emb.timestamp = datetime.datetime.utcnow()
-        emb.set_image(url=data["thumbnail_url"].format(width=320, height=180))
-        emb.set_footer(icon_url=ch["profile_image_url"], text="Twitch")
-        emb.set_thumbnail(url=game_url)
-
-        async with aiosqlite.connect("data.db") as db:
-            # streams should only be announced every hour
-            # to keep channels from getting spammed with stream restarts
-            cursor = await db.execute("SELECT LastLive FROM TwitchChannels WHERE ID=?", (ch["id"],))
-            dt = await cursor.fetchall()
-            await cursor.close()
-            dt_str = dt[0][0]
-            while len(dt_str.split("-")[0]) < 4:
-                dt_str = "0" + dt_str
-            if (datetime.datetime.utcnow() - datetime.datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')).total_seconds() > 60 * 60:
-                await db.execute("UPDATE TwitchChannels SET LastLive=? WHERE ID=?", (datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'), ch["id"]))
-                await db.commit()
-            else:
-                # stream was restarted
-                return web.Response()
-
-            # sending messages to all subscribed servers
-            cursor = await db.execute("SELECT Guilds.TwitchNotifChannel \
-                                       FROM TwitchSubscriptions INNER JOIN Guilds \
-                                       ON TwitchSubscriptions.Guild=Guilds.ID \
-                                       WHERE TwitchChannel=?", (data["user_id"],))
-
-            async for row in cursor:
-                announceChannel = self.bot.get_channel(row[0])
-                await announceChannel.send(ch["display_name"] + " is now live with " + game_name + " !", embed=emb)
-
-            await cursor.close()
-        return web.Response()
 
     # handler for posts to the /surrenderat20 endpoint
     async def surrenderat20(self, request):
-        obj = await request.json()
-        item = obj["items"][0]
-
-        emb = discord.Embed(title=item["title"],
-                            color=discord.Colour.orange(),
-                            description=" ".join(item["categories"]),
-                            url=item["permalinkUrl"],
-                            timestamp=datetime.datetime.utcnow())
-        emb.set_thumbnail(url="https://images-ext-2.discordapp.net/external/p4GLboECWMVLnDH-Orv6nkWm3OG8uLdI2reNRQ9RX74/http/3.bp.blogspot.com/-M_ecJWWc5CE/Uizpk6U3lwI/AAAAAAAACLo/xyh6eQNRzzs/s640/sitethumb.jpg")
-        if item["actor"]["id"] == "Aznbeat":
-            author_img = "https://images-ext-2.discordapp.net/external/HI8rRYejC0QYULMmoDBTcZgJ52U0Msvwj9JmUxd-JAI/https/disqus.com/api/users/avatars/Aznbeat.jpg"
-        else:
-            author_img = "https://images-ext-2.discordapp.net/external/t0bRQzNtKHoIDcFcj2X8R0O0UPqeeyKdvawNbVMoHXE/https/disqus.com/api/users/avatars/Moobeat.jpg"
-        emb.set_author(name=item["actor"]["displayName"], icon_url=author_img)
-
         try:
-            content = item["content"]
-        except KeyError:
-            parsingChannelUrl = "https://www.googleapis.com/blogger/v3/blogs/8141971962311514602/posts/" + item["id"][-19:]
-            parsingChannelQueryString = {"key": auth_token.google, "fields": "content"}
-            async with self.bot.session.get(parsingChannelUrl, params=parsingChannelQueryString) as resp:
-                post_obj = await resp.json()
-            content = post_obj["content"]
+            obj = await request.json()
+            item = obj["items"][0]
 
-        startImgPos = content.find('<img', 0, len(content)) + 4
-        if(startImgPos > -1):
-            endImgPos = content.find('>', startImgPos, len(content))
-            imageTag = content[startImgPos:endImgPos]
-            startSrcPos = imageTag.find('src="', 0, len(content)) + 5
-            endSrcPos = imageTag.find('"', startSrcPos, len(content))
-            linkTag = imageTag[startSrcPos:endSrcPos]
+            emb = discord.Embed(title=item["title"],
+                                color=discord.Colour.orange(),
+                                description=" ".join(item["categories"]),
+                                url=item["permalinkUrl"],
+                                timestamp=datetime.datetime.utcnow())
+            emb.set_thumbnail(url="https://images-ext-2.discordapp.net/external/p4GLboECWMVLnDH-Orv6nkWm3OG8uLdI2reNRQ9RX74/http/3.bp.blogspot.com/-M_ecJWWc5CE/Uizpk6U3lwI/AAAAAAAACLo/xyh6eQNRzzs/s640/sitethumb.jpg")
+            if item["actor"]["id"] == "Aznbeat":
+                author_img = "https://images-ext-2.discordapp.net/external/HI8rRYejC0QYULMmoDBTcZgJ52U0Msvwj9JmUxd-JAI/https/disqus.com/api/users/avatars/Aznbeat.jpg"
+            else:
+                author_img = "https://images-ext-2.discordapp.net/external/t0bRQzNtKHoIDcFcj2X8R0O0UPqeeyKdvawNbVMoHXE/https/disqus.com/api/users/avatars/Moobeat.jpg"
+            emb.set_author(name=item["actor"]["displayName"], icon_url=author_img)
 
-            emb.set_image(url=linkTag)
+            try:
+                content = item["content"]
+            except KeyError:
+                parsingChannelUrl = "https://www.googleapis.com/blogger/v3/blogs/8141971962311514602/posts/" + item["id"][-19:]
+                parsingChannelQueryString = {"key": auth_token.google, "fields": "content"}
+                async with self.bot.session.get(parsingChannelUrl, params=parsingChannelQueryString) as resp:
+                    post_obj = await resp.json()
+                content = post_obj["content"]
 
-        async with aiosqlite.connect("data.db") as db:
-            subscriptions = await db.execute("SELECT * FROM SurrenderAt20Subscriptions")
-            async for guild_subscriptions in subscriptions:
-                for category in item["categories"]:
-                    if category == "Red Posts":
-                        if guild_subscriptions[1] == 1:
-                            break
-                    elif category == "PBE":
-                        if guild_subscriptions[2] == 1:
-                            break
-                    elif category == "Rotations":
-                        if guild_subscriptions[3] == 1:
-                            break
-                    elif category == "Esports":
-                        if guild_subscriptions[4] == 1:
-                            break
-                    elif category == "Releases":
-                        if guild_subscriptions[5] == 1:
-                            break
-                else:
-                    continue
+            startImgPos = content.find('<img', 0, len(content)) + 4
+            if(startImgPos > -1):
+                endImgPos = content.find('>', startImgPos, len(content))
+                imageTag = content[startImgPos:endImgPos]
+                startSrcPos = imageTag.find('src="', 0, len(content)) + 5
+                endSrcPos = imageTag.find('"', startSrcPos, len(content))
+                linkTag = imageTag[startSrcPos:endSrcPos]
 
-                guild_emb = emb
-                keywords = await db.execute("SELECT Keyword FROM Keywords WHERE Guild=?", (guild_subscriptions[0],))
-                async for keyword in keywords:
-                    kw = " " + keyword[0] + " "
-                    # check if keyword appears in post
-                    brokentext = content.replace("<br />", "\n")
-                    cleantext = re.sub(self.cleanr, '', brokentext).replace("&nbsp;", " ")
-                    if kw in cleantext.lower():
-                        extracts = []
-                        # find paragraphs with keyword
-                        for part in cleantext.split("\n\n"):
-                            if kw in part.lower():
-                                extracts.append(part.strip())
+                emb.set_image(url=linkTag)
 
-                        # create message embed and send it to the server
-                        exctrats_string = "\n\n".join(extracts)
-                        if len(exctrats_string) > 950:
-                            exctrats_string = exctrats_string[:950] + "... `" + str(cleantext.lower().count(kw)) + "` mentions in total"
+            async with aiosqlite.connect("data.db") as db:
+                subscriptions = await db.execute("SELECT * FROM SurrenderAt20Subscriptions")
+                async for guild_subscriptions in subscriptions:
+                    for category in item["categories"]:
+                        if category == "Red Posts":
+                            if guild_subscriptions[1] == 1:
+                                break
+                        elif category == "PBE":
+                            if guild_subscriptions[2] == 1:
+                                break
+                        elif category == "Rotations":
+                            if guild_subscriptions[3] == 1:
+                                break
+                        elif category == "Esports":
+                            if guild_subscriptions[4] == 1:
+                                break
+                        elif category == "Releases":
+                            if guild_subscriptions[5] == 1:
+                                break
+                    else:
+                        continue
 
-                        guild_emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value=exctrats_string, inline=False)
-                await keywords.close()
+                    guild_emb = emb
+                    keywords = await db.execute("SELECT Keyword FROM Keywords WHERE Guild=?", (guild_subscriptions[0],))
+                    async for keyword in keywords:
+                        kw = " " + keyword[0] + " "
+                        # check if keyword appears in post
+                        brokentext = content.replace("<br />", "\n")
+                        cleantext = re.sub(self.cleanr, '', brokentext).replace("&nbsp;", " ")
+                        if kw in cleantext.lower():
+                            extracts = []
+                            # find paragraphs with keyword
+                            for part in cleantext.split("\n\n"):
+                                if kw in part.lower():
+                                    extracts.append(part.strip())
 
-                channels = await db.execute("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=?", (guild_subscriptions[0],))
-                channel_id = await channels.fetchone()
-                await channels.close()
-                channel = self.bot.get_channel(channel_id[0])
-                await channel.send("New Surrender@20 post!", embed=guild_emb)
+                            # create message embed and send it to the server
+                            exctrats_string = "\n\n".join(extracts)
+                            if len(exctrats_string) > 950:
+                                exctrats_string = exctrats_string[:950] + "... `" + str(cleantext.lower().count(kw)) + "` mentions in total"
 
-        return web.Response()
+                            guild_emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value=exctrats_string, inline=False)
+                    await keywords.close()
+
+                    channels = await db.execute("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=?", (guild_subscriptions[0],))
+                    channel_id = await channels.fetchone()
+                    await channels.close()
+                    channel = self.bot.get_channel(channel_id[0])
+                    await channel.send("New Surrender@20 post!", embed=guild_emb)
+        except Exception as ex:
+            raise ex
+        finally:
+            return web.Response()
 
     # various verification endpoints
     # will verify the url as my own to google
