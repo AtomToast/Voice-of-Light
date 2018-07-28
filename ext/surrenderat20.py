@@ -43,7 +43,7 @@ class SurrenderAt20:
             await ctx.send("Command failed, please make sure that the bot has both permissions for sending messages and using embeds in the specified channel!")
             return
 
-        async with aiosqlite.connect("data.db") as db:
+        async with aiosqlite.connect("data.db", timeout=10) as db:
             # add channel id for the guild to the database
             await db.execute("UPDATE Guilds SET SurrenderAt20NotifChannel=? WHERE ID=?",
                              (channel_obj.id, ctx.guild.id))
@@ -63,7 +63,7 @@ class SurrenderAt20:
         - Rotations
         - Esports
         - Releases"""
-        async with aiosqlite.connect("data.db") as db:
+        async with aiosqlite.connect("data.db", timeout=10) as db:
             # check if announcement channel is set up
             cursor = await db.execute("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
             row = await cursor.fetchall()
@@ -160,7 +160,7 @@ class SurrenderAt20:
         - Rotations
         - Esports
         - Releases"""
-        async with aiosqlite.connect("data.db") as db:
+        async with aiosqlite.connect("data.db", timeout=10) as db:
             n = await db.execute("SELECT * FROM SurrenderAt20Subscriptions WHERE Guild=?", (ctx.guild.id,))
             results = await n.fetchall()
             await n.close()
@@ -211,9 +211,9 @@ class SurrenderAt20:
     @surrenderat20.command(aliases=["add"])
     async def add_keyword(self, ctx, *, keyword=None):
         """Adds a keyword to search for"""
-        async with aiosqlite.connect("data.db") as db:
+        async with aiosqlite.connect("data.db", timeout=10) as db:
             # check if announcement channel is set up
-            cursor = await db.execute("SELECT AnnounceChannelID FROM Guilds WHERE ID=?", (ctx.guild.id,))
+            cursor = await db.execute("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
             row = await cursor.fetchall()
             await cursor.close()
             if len(row) == 0:
@@ -226,7 +226,7 @@ class SurrenderAt20:
 
         kw = keyword.lower()
 
-        async with aiosqlite.connect("data.db") as db:
+        async with aiosqlite.connect("data.db", timeout=10) as db:
             # add keyword for the guild to database if it doesn't already exist
             cursor = await db.execute("SELECT * FROM Keywords WHERE Keyword=? AND Guild=?", (kw, ctx.guild.id))
             results = await cursor.fetchall()
@@ -250,7 +250,7 @@ class SurrenderAt20:
 
         kw = keyword.lower()
 
-        async with aiosqlite.connect("data.db") as db:
+        async with aiosqlite.connect("data.db", timeout=10) as db:
             # remove keyword for guild from database
             cursor = await db.execute("SELECT * FROM Keywords WHERE Keyword=? AND Guild=?", (kw, ctx.guild.id))
             results = await cursor.fetchall()
@@ -312,6 +312,15 @@ class SurrenderAt20:
     @surrenderat20.command()
     async def latest(self, ctx):
         """Sends the lastest Post"""
+        async with aiosqlite.connect("data.db") as db:
+            # check if announcement channel is set up
+            cursor = await db.execute("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
+            row = await cursor.fetchall()
+            await cursor.close()
+            if len(row) == 0:
+                await ctx.send("You need to set up a notifications channel before fetching the latest post")
+                return
+
         parsingChannelUrl = "https://www.googleapis.com/blogger/v3/blogs/8141971962311514602/posts"
         parsingChannelQueryString = {"key": auth_token.google, "fields": "items"}
         async with self.bot.session.get(parsingChannelUrl, params=parsingChannelQueryString) as resp:

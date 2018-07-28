@@ -36,7 +36,7 @@ class Utils:
             await ctx.send("Command failed, please make sure that the bot has both permissions for sending messages and using embeds in the specified channel!")
             return
 
-        async with aiosqlite.connect("data.db") as db:
+        async with aiosqlite.connect("data.db", timeout=10) as db:
             # add channel id for the guild to the database
             await db.execute("UPDATE Guilds SET SurrenderAt20NotifChannel=?, TwitchNotifChannel=?, YoutubeNotifChannel=?, RedditNotifChannel=? WHERE ID=?",
                              (channel_obj.id, channel_obj.id, channel_obj.id, channel_obj.id, ctx.guild.id))

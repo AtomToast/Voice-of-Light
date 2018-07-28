@@ -41,7 +41,7 @@ class Twitch:
             await ctx.send("Command failed, please make sure that the bot has both permissions for sending messages and using embeds in the specified channel!")
             return
 
-        async with aiosqlite.connect("data.db") as db:
+        async with aiosqlite.connect("data.db", timeout=10) as db:
             # add channel id for the guild to the database
             await db.execute("UPDATE Guilds SET TwitchNotifChannel=? WHERE ID=?",
                              (channel_obj.id, ctx.guild.id))
@@ -82,7 +82,7 @@ class Twitch:
         channel_id = ch["id"]
         channel_name = ch["display_name"]
 
-        async with aiosqlite.connect("data.db") as db:
+        async with aiosqlite.connect("data.db", timeout=10) as db:
             # check if twitch channel is already in database
             # otherwise add it
             n = await db.execute("SELECT 1 FROM TwitchChannels WHERE ID=?", (channel_id,))
@@ -145,7 +145,7 @@ class Twitch:
         channel_id = ch["id"]
         channel_name = ch["display_name"]
 
-        async with aiosqlite.connect("data.db") as db:
+        async with aiosqlite.connect("data.db", timeout=10) as db:
             # check if server is subscribed to channel
             # remove subscription
             n = await db.execute("SELECT 1 FROM TwitchSubscriptions WHERE TwitchChannel=? AND Guild=?", (channel_id, ctx.guild.id))

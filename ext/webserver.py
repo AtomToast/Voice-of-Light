@@ -1,6 +1,7 @@
 import discord
 
 from aiohttp import web
+import asyncio
 import auth_token
 import aiosqlite
 import xmltodict
@@ -58,6 +59,7 @@ class Webserver:
                 async with self.bot.session.post(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
                     if resp.status != 202:
                         print(resp.text)
+                await asyncio.sleep(1.5)
             await cursor.close()
 
             cursor = await db.execute("SELECT DISTINCT YoutubeChannel FROM YoutubeSubscriptions")
@@ -69,6 +71,7 @@ class Webserver:
                 async with self.bot.session.post(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
                     if resp.status != 202:
                         print(resp.text)
+                await asyncio.sleep(1.5)
             await cursor.close()
 
     # pings feedburner to update feed
@@ -136,7 +139,7 @@ class Webserver:
             else:
                 return web.Response()
 
-            async with aiosqlite.connect("data.db") as db:
+            async with aiosqlite.connect("data.db", timeout=10) as db:
                 # if it is a livestream the bot shouldn't announce a livestream more than once in an hour
                 # to keep channels from getting spammed from stream restarts
                 if video["liveBroadcastContent"] == "live":
@@ -234,7 +237,7 @@ class Webserver:
             emb.set_footer(icon_url=ch["profile_image_url"], text="Twitch")
             emb.set_thumbnail(url=game_url)
 
-            async with aiosqlite.connect("data.db") as db:
+            async with aiosqlite.connect("data.db", timeout=10) as db:
                 # streams should only be announced every hour
                 # to keep channels from getting spammed with stream restarts
                 cursor = await db.execute("SELECT LastLive FROM TwitchChannels WHERE ID=?", (ch["id"],))

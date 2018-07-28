@@ -8,6 +8,8 @@ import auth_token
 import traceback
 import sys
 
+import time
+
 
 def callback(result):
         ex = result.exception()
@@ -27,8 +29,8 @@ class Reddit:
     async def poll(self):
         await self.bot.wait_until_ready()
 
-        async with aiosqlite.connect("data.db") as db:
-            while not self.bot.is_closed():
+        while not self.bot.is_closed():
+            async with aiosqlite.connect("data.db", timeout=30) as db:
                 # loop through all subreddits and check if a new post is up
                 subreddits = await db.execute("SELECT * FROM Subreddits")
                 async for row in subreddits:
@@ -52,9 +54,14 @@ class Reddit:
                     # new post found
                     if submission_data["id"] != row[2] and submission_data["created_utc"] > row[3]:
                         # update last post data in database
+                        t = time.clock()
+                        print(row[1] + ": in_transaction: " + str(db.in_transaction))
                         await db.execute("UPDATE Subreddits SET LastPostID=?, LastPostTime=? WHERE ID=?",
                                          (submission_data["id"], submission_data["created_utc"], row[0]))
+                        print(row[1] + ": execution: " + str(time.clock() - t))
+                        print(row[1] + ": in_transaction: " + str(db.in_transaction))
                         await db.commit()
+                        print(row[1] + ": commit: " + str(time.clock() - t))
 
                         # create message embed
                         emb = discord.Embed(title=submission_data["title"],
@@ -122,7 +129,7 @@ class Reddit:
             await ctx.send("Command failed, please make sure that the bot has both permissions for sending messages and using embeds in the specified channel!")
             return
 
-        async with aiosqlite.connect("data.db") as db:
+        async with aiosqlite.connect("data.db", timeout=10) as db:
             # add channel id for the guild to the database
             await db.execute("UPDATE Guilds SET RedditNotifChannel=? WHERE ID=?",
                              (channel_obj.id, ctx.guild.id))
@@ -135,7 +142,7 @@ class Reddit:
         """Subscribes to a subreddit
 
         Its new posts will be announced in the specified channel"""
-        async with aiosqlite.connect("data.db") as db:
+        async with aiosqlite.connect("data.db", timeout=10) as db:
             # check if announcement channel is set up
             cursor = await db.execute("SELECT RedditNotifChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
             row = await cursor.fetchall()
@@ -179,7 +186,7 @@ class Reddit:
 
         submission_data = submissions_obj["data"]["children"][0]["data"]
 
-        async with aiosqlite.connect("data.db") as db:
+        async with aiosqlite.connect("data.db", timeout=10) as db:
             # if subreddit is not yet in database, add it
             n = await db.execute("SELECT 1 FROM Subreddits WHERE ID=?", (submission_data["subreddit_id"],))
             results = await n.fetchall()
@@ -251,7 +258,7 @@ class Reddit:
 
         submission_data = submissions_obj["data"]["children"][0]["data"]
 
-        async with aiosqlite.connect("data.db") as db:
+        async with aiosqlite.connect("data.db", timeout=10) as db:
             # remove subscription from database
             n = await db.execute("SELECT 1 FROM SubredditSubscriptions WHERE Subreddit=? AND Guild=?",
                                  (submission_data["subreddit_id"], ctx.guild.id))

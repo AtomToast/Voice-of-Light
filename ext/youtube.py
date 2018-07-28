@@ -42,7 +42,7 @@ class Youtube:
             await ctx.send("Command failed, please make sure that the bot has both permissions for sending messages and using embeds in the specified channel!")
             return
 
-        async with aiosqlite.connect("data.db") as db:
+        async with aiosqlite.connect("data.db", timeout=10) as db:
             # add channel id for the guild to the database
             await db.execute("UPDATE Guilds SET YoutubeNotifChannel=? WHERE ID=?",
                              (channel_obj.id, ctx.guild.id))
@@ -110,7 +110,7 @@ class Youtube:
 
         videoID = playlist_obj["items"][0]["id"]
 
-        async with aiosqlite.connect("data.db") as db:
+        async with aiosqlite.connect("data.db", timeout=10) as db:
             # check if youtube channel is already in database, otherwise add it
             n = await db.execute("SELECT 1 FROM YoutubeChannels WHERE ID=?", (channel_id,))
             results = await n.fetchall()
@@ -172,7 +172,7 @@ class Youtube:
         channel_id = ch["id"]["channelId"]
         channel_name = ch["snippet"]["channelTitle"]
 
-        async with aiosqlite.connect("data.db") as db:
+        async with aiosqlite.connect("data.db", timeout=10) as db:
             # check if server is already subscribed to the channel
             # remove subscrption from database
             n = await db.execute("SELECT 1 FROM YoutubeSubscriptions WHERE YoutubeChannel=? AND Guild=?", (channel_id, ctx.guild.id))
