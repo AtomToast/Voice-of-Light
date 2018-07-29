@@ -3,7 +3,6 @@ import discord
 from aiohttp import web
 import asyncio
 import auth_token
-import aiosqlite
 import xmltodict
 import datetime
 import re
@@ -48,9 +47,10 @@ class Webserver:
     # goes through all twitch and youtube channels in the database
     # and refresh their subscription
     async def refresh_subscriptions(self):
-        async with aiosqlite.connect("data.db") as db:
-            cursor = await db.execute("SELECT DISTINCT TwitchChannel FROM TwitchSubscriptions")
-            async for row in cursor:
+        await self.bot.wait_until_ready()
+        async with self.bot.pool.acquire() as db:
+            cursor = await db.fetch("SELECT DISTINCT TwitchChannel FROM TwitchSubscriptions")
+            for row in cursor:
                 ID = row[0]
                 parsingChannelUrl = "https://api.twitch.tv/helix/webhooks/hub"
                 parsingChannelHeader = {'Client-ID': auth_token.twitch}
@@ -60,10 +60,9 @@ class Webserver:
                     if resp.status != 202:
                         print(resp.text)
                 await asyncio.sleep(1.5)
-            await cursor.close()
 
-            cursor = await db.execute("SELECT DISTINCT YoutubeChannel FROM YoutubeSubscriptions")
-            async for row in cursor:
+            cursor = await db.fetch("SELECT DISTINCT YoutubeChannel FROM YoutubeSubscriptions")
+            for row in cursor:
                 ID = row[0]
                 parsingChannelUrl = "https://pubsubhubbub.appspot.com/subscribe"
                 parsingChannelQueryString = {"hub.mode": "subscribe", "hub.callback": auth_token.server_url + "/youtube",
@@ -72,7 +71,6 @@ class Webserver:
                     if resp.status != 202:
                         print(resp.text)
                 await asyncio.sleep(1.5)
-            await cursor.close()
 
     # pings feedburner to update feed
     async def ping_feedburner(self):
@@ -95,9 +93,8 @@ class Webserver:
                                              "key": auth_token.google}
                 async with self.bot.session.get(parsingChannelUrl, params=parsingChannelQueryString) as resp:
                     ch = await resp.json()
-                async with aiosqlite.connect("data.db") as db:
-                    await db.execute("UPDATE YoutubeChannels SET VideoCount=? WHERE ID=?", (int(ch["items"][0]["statistics"]["videoCount"]), ch["items"][0]["id"]))
-                    await db.commit()
+                async with self.bot.pool.acquire() as db:
+                    await db.execute("UPDATE YoutubeChannels SET VideoCount=$1 WHERE ID=$2", int(ch["items"][0]["statistics"]["videoCount"]), ch["items"][0]["id"])
                 return web.Response()
             except KeyError:
                 pass
@@ -139,19 +136,14 @@ class Webserver:
             else:
                 return web.Response()
 
-            async with aiosqlite.connect("data.db", timeout=10) as db:
+            async with self.bot.pool.acquire() as db:
                 # if it is a livestream the bot shouldn't announce a livestream more than once in an hour
                 # to keep channels from getting spammed from stream restarts
                 if video["liveBroadcastContent"] == "live":
-                    cursor = await db.execute("SELECT LastLive FROM YoutubeChannels WHERE ID=?", (obj["feed"]["entry"]["yt:channelId"],))
-                    dt = await cursor.fetchall()
-                    await cursor.close()
-                    dt_str = dt[0][0]
-                    while len(dt_str.split("-")[0]) < 4:
-                        dt_str = "0" + dt_str
-                    if (datetime.datetime.utcnow() - datetime.datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')).total_seconds() > 60 * 60:
-                        await db.execute("UPDATE YoutubeChannels SET LastLive=? WHERE ID=?", (datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'), obj["feed"]["entry"]["yt:channelId"]))
-                        await db.commit()
+                    dt = await db.fetchval("SELECT LastLive FROM YoutubeChannels WHERE ID=$1", obj["feed"]["entry"]["yt:channelId"])
+                    if ((datetime.datetime.utcnow() - dt).total_seconds() > 60 * 60):
+                        await db.execute("UPDATE YoutubeChannels SET LastLive=$1 WHERE ID=$2",
+                                         datetime.datetime.utcnow(), obj["feed"]["entry"]["yt:channelId"])
                     else:
                         # stream was restarted
                         return web.Response()
@@ -159,25 +151,22 @@ class Webserver:
                     # youtube does not tell if the notification is about a new video
                     # or edits to an old one
                     # so this checks if it's a new video or just an edit
-                    cursor = await db.execute("SELECT LastVideoID, VideoCount FROM YoutubeChannels WHERE ID=?", (obj["feed"]["entry"]["yt:channelId"],))
-                    r = await cursor.fetchall()
+                    r = await db.fetch("SELECT LastVideoID, VideoCount FROM YoutubeChannels WHERE ID=$1", obj["feed"]["entry"]["yt:channelId"])
                     stats = r[0]
-                    await cursor.close()
                     if obj["feed"]["entry"]["yt:videoId"] != stats[0] and int(channel_obj["statistics"]["videoCount"]) > stats[1]:
-                        await db.execute("UPDATE YoutubeChannels SET LastVideoID=?, VideoCount=? WHERE ID=?",
-                                         (obj["feed"]["entry"]["yt:videoId"], int(channel_obj["statistics"]["videoCount"]), obj["feed"]["entry"]["yt:channelId"]))
-                        await db.commit()
+                        await db.execute("UPDATE YoutubeChannels SET LastVideoID=$1, VideoCount=$2 WHERE ID=$3",
+                                         obj["feed"]["entry"]["yt:videoId"], int(channel_obj["statistics"]["videoCount"]), obj["feed"]["entry"]["yt:channelId"])
                     else:
                         # A video has been edited
                         return web.Response()
 
                 # send messages in all subscribed servers
-                cursor = await db.execute("SELECT Guilds.YoutubeNotifChannel, YoutubeSubscriptions.OnlyStreams \
+                cursor = await db.fetch("SELECT Guilds.YoutubeNotifChannel, YoutubeSubscriptions.OnlyStreams \
                                            FROM YoutubeSubscriptions INNER JOIN Guilds \
                                            ON YoutubeSubscriptions.Guild=Guilds.ID \
-                                           WHERE YoutubeChannel=?", (obj["feed"]["entry"]["yt:channelId"],))
+                                           WHERE YoutubeChannel=$1", obj["feed"]["entry"]["yt:channelId"])
 
-                async for row in cursor:
+                for row in cursor:
                     # if the server set the subscription to "Only streams"
                     # videos will not be announced
                     if row[1] == 1 and video["liveBroadcastContent"] == "none":
@@ -185,7 +174,6 @@ class Webserver:
                     announceChannel = self.bot.get_channel(row[0])
                     await announceChannel.send(announcement, embed=emb)
 
-                await cursor.close()
         except Exception as ex:
             raise ex
         finally:
@@ -237,33 +225,29 @@ class Webserver:
             emb.set_footer(icon_url=ch["profile_image_url"], text="Twitch")
             emb.set_thumbnail(url=game_url)
 
-            async with aiosqlite.connect("data.db", timeout=10) as db:
+            async with self.bot.pool.acquire() as db:
                 # streams should only be announced every hour
                 # to keep channels from getting spammed with stream restarts
-                cursor = await db.execute("SELECT LastLive FROM TwitchChannels WHERE ID=?", (ch["id"],))
-                dt = await cursor.fetchall()
-                await cursor.close()
+                dt = await db.fetch("SELECT LastLive FROM TwitchChannels WHERE ID=$1", ch["id"])
                 dt_str = dt[0][0]
                 while len(dt_str.split("-")[0]) < 4:
                     dt_str = "0" + dt_str
                 if (datetime.datetime.utcnow() - datetime.datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')).total_seconds() > 60 * 60:
-                    await db.execute("UPDATE TwitchChannels SET LastLive=? WHERE ID=?", (datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'), ch["id"]))
-                    await db.commit()
+                    await db.execute("UPDATE TwitchChannels SET LastLive=$1 WHERE ID=$2", datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'), ch["id"])
                 else:
                     # stream was restarted
                     return web.Response()
 
                 # sending messages to all subscribed servers
-                cursor = await db.execute("SELECT Guilds.TwitchNotifChannel \
+                cursor = await db.fetch("SELECT Guilds.TwitchNotifChannel \
                                            FROM TwitchSubscriptions INNER JOIN Guilds \
                                            ON TwitchSubscriptions.Guild=Guilds.ID \
-                                           WHERE TwitchChannel=?", (data["user_id"],))
+                                           WHERE TwitchChannel=$1", data["user_id"])
 
-                async for row in cursor:
+                for row in cursor:
                     announceChannel = self.bot.get_channel(row[0])
                     await announceChannel.send(ch["display_name"] + " is now live with " + game_name + " !", embed=emb)
 
-                await cursor.close()
         except Exception as ex:
             raise ex
         finally:
@@ -306,9 +290,9 @@ class Webserver:
 
                 emb.set_image(url=linkTag)
 
-            async with aiosqlite.connect("data.db") as db:
-                subscriptions = await db.execute("SELECT * FROM SurrenderAt20Subscriptions")
-                async for guild_subscriptions in subscriptions:
+            async with self.bot.pool.acquire() as db:
+                subscriptions = await db.fetch("SELECT * FROM SurrenderAt20Subscriptions")
+                for guild_subscriptions in subscriptions:
                     for category in item["categories"]:
                         if category == "Red Posts":
                             if guild_subscriptions[1] == 1:
@@ -329,8 +313,8 @@ class Webserver:
                         continue
 
                     guild_emb = emb
-                    keywords = await db.execute("SELECT Keyword FROM Keywords WHERE Guild=?", (guild_subscriptions[0],))
-                    async for keyword in keywords:
+                    keywords = await db.fetch("SELECT Keyword FROM Keywords WHERE Guild=$1", guild_subscriptions[0])
+                    for keyword in keywords:
                         kw = " " + keyword[0] + " "
                         # check if keyword appears in post
                         brokentext = content.replace("<br />", "\n")
@@ -348,12 +332,9 @@ class Webserver:
                                 exctrats_string = exctrats_string[:950] + "... `" + str(cleantext.lower().count(kw)) + "` mentions in total"
 
                             guild_emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value=exctrats_string, inline=False)
-                    await keywords.close()
 
-                    channels = await db.execute("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=?", (guild_subscriptions[0],))
-                    channel_id = await channels.fetchone()
-                    await channels.close()
-                    channel = self.bot.get_channel(channel_id[0])
+                    channels = await db.fetchrow("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=$1", guild_subscriptions[0])
+                    channel = self.bot.get_channel(channels[0])
                     await channel.send("New Surrender@20 post!", embed=guild_emb)
         except Exception as ex:
             raise ex

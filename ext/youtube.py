@@ -2,7 +2,6 @@ import discord
 from discord.ext import commands
 
 import auth_token
-import aiosqlite
 import datetime
 import re
 
@@ -42,11 +41,10 @@ class Youtube:
             await ctx.send("Command failed, please make sure that the bot has both permissions for sending messages and using embeds in the specified channel!")
             return
 
-        async with aiosqlite.connect("data.db", timeout=10) as db:
+        async with self.bot.pool.acquire() as db:
             # add channel id for the guild to the database
-            await db.execute("UPDATE Guilds SET YoutubeNotifChannel=? WHERE ID=?",
-                             (channel_obj.id, ctx.guild.id))
-            await db.commit()
+            await db.execute("UPDATE Guilds SET YoutubeNotifChannel=$1 WHERE ID=$2",
+                             channel_obj.id, ctx.guild.id)
 
         await ctx.send("Successfully set Youtube notifications to " + channel_obj.mention)
 
@@ -57,12 +55,10 @@ class Youtube:
         Its videos and livestreams will be announced in the specified channel
 
         Use "~onlystreams" in order to ignore videos of this channel"""
-        async with aiosqlite.connect("data.db") as db:
+        async with self.bot.pool.acquire() as db:
             # check if announcement channel is set up
-            cursor = await db.execute("SELECT YoutubeNotifChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
-            row = await cursor.fetchall()
-            await cursor.close()
-            if len(row) == 0 or row[0][0] is None:
+            rows = await db.fetch("SELECT YoutubeNotifChannel FROM Guilds WHERE ID=$1", ctx.guild.id)
+            if len(rows) == 0 or rows[0][0] is None:
                 await ctx.send("You need to set up a notifications channel before subscribing! \nUse either ;setchannel or ;surrenderat20 setchannel")
                 return
 
@@ -110,24 +106,18 @@ class Youtube:
 
         videoID = playlist_obj["items"][0]["id"]
 
-        async with aiosqlite.connect("data.db", timeout=10) as db:
+        async with self.bot.pool.acquire() as db:
             # check if youtube channel is already in database, otherwise add it
-            n = await db.execute("SELECT 1 FROM YoutubeChannels WHERE ID=?", (channel_id,))
-            results = await n.fetchall()
-            await n.close()
+            results = await db.fetch("SELECT 1 FROM YoutubeChannels WHERE ID=$1", channel_id)
             if len(results) == 0:
-                await db.execute("INSERT INTO YoutubeChannels (ID, Name, LastLive, LastVideoID, VideoCount) VALUES (?, ?, ?, ?, ?)",
-                                 (channel_id, channel_name, datetime.datetime.min.strftime('%Y-%m-%d %H:%M:%S'), videoID, videoCount))
-                await db.commit()
+                await db.execute("INSERT INTO YoutubeChannels (ID, Name, LastLive, LastVideoID, VideoCount) VALUES ($1, $2, $3, $4, $5)",
+                                 channel_id, channel_name, datetime.datetime.min, videoID, videoCount)
 
             # insert subscription into the database
-            n = await db.execute("SELECT 1 FROM YoutubeSubscriptions WHERE YoutubeChannel=? AND Guild=?", (channel_id, ctx.guild.id))
-            results = await n.fetchall()
-            await n.close()
+            results = await db.fetch("SELECT 1 FROM YoutubeSubscriptions WHERE YoutubeChannel=$1 AND Guild=$2", channel_id, ctx.guild.id)
             if len(results) == 0:
-                await db.execute("INSERT INTO YoutubeSubscriptions (YoutubeChannel, Guild, OnlyStreams) VALUES (?, ?, ?)",
-                                 (channel_id, ctx.guild.id, onlystreams))
-                await db.commit()
+                await db.execute("INSERT INTO YoutubeSubscriptions (YoutubeChannel, Guild, OnlyStreams) VALUES ($1, $2, $3)",
+                                 channel_id, ctx.guild.id, onlystreams)
             else:
                 await ctx.send("You are already subscribed to this channel")
                 return
@@ -172,26 +162,20 @@ class Youtube:
         channel_id = ch["id"]["channelId"]
         channel_name = ch["snippet"]["channelTitle"]
 
-        async with aiosqlite.connect("data.db", timeout=10) as db:
+        async with self.bot.pool.acquire() as db:
             # check if server is already subscribed to the channel
             # remove subscrption from database
-            n = await db.execute("SELECT 1 FROM YoutubeSubscriptions WHERE YoutubeChannel=? AND Guild=?", (channel_id, ctx.guild.id))
-            results = await n.fetchall()
-            await n.close()
+            results = await db.fetch("SELECT 1 FROM YoutubeSubscriptions WHERE YoutubeChannel=$1 AND Guild=$2", channel_id, ctx.guild.id)
             if len(results) == 1:
-                await db.execute("DELETE FROM YoutubeSubscriptions WHERE YoutubeChannel=? AND Guild=?", (channel_id, ctx.guild.id))
-                await db.commit()
+                await db.execute("DELETE FROM YoutubeSubscriptions WHERE YoutubeChannel=$1 AND Guild=$2", channel_id, ctx.guild.id)
             else:
                 await ctx.send("You are not subscribed to this channel")
                 return
 
             # remove channel from database if no server is subscribed to it anymore
-            n = await db.execute("SELECT 1 FROM YoutubeSubscriptions WHERE YoutubeChannel=?", (channel_id,))
-            results = await n.fetchall()
-            await n.close()
+            results = await db.fetch("SELECT 1 FROM YoutubeSubscriptions WHERE YoutubeChannel=$1", channel_id)
             if len(results) == 0:
-                await db.execute("DELETE FROM YoutubeChannels WHERE ID=?", (channel_id,))
-                await db.commit()
+                await db.execute("DELETE FROM YoutubeChannels WHERE ID=$1", channel_id)
 
         # send unsubscribe request
         parsingChannelUrl = "https://pubsubhubbub.appspot.com/subscribe"
@@ -213,19 +197,18 @@ class Youtube:
     async def _list(self, ctx):
         """Displays a list of all subscribed channels"""
         names = ""
-        async with aiosqlite.connect("data.db") as db:
+        async with self.bot.pool.acquire() as db:
             # get all subscribed to channels of the guild
-            cursor = await db.execute("SELECT YoutubeChannels.Name, YoutubeSubscriptions.OnlyStreams \
+            cursor = await db.fetch("SELECT YoutubeChannels.Name, YoutubeSubscriptions.OnlyStreams \
                                        FROM YoutubeSubscriptions INNER JOIN YoutubeChannels \
                                        ON YoutubeSubscriptions.YoutubeChannel=YoutubeChannels.ID \
-                                       WHERE Guild=?", (ctx.guild.id,))
-            async for row in cursor:
+                                       WHERE Guild=$1", ctx.guild.id)
+            for row in cursor:
                 if row[1] == 1:
                     os = " (Only streams)"
                 else:
                     os = ""
                 names = names + row[0] + os + "\n"
-            await cursor.close()
 
         emb = discord.Embed(title="Youtube subscriptions", color=discord.Colour.red(), description=names)
         await ctx.send(embed=emb)

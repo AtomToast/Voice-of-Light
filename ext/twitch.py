@@ -2,7 +2,6 @@ import discord
 from discord.ext import commands
 
 import auth_token
-import aiosqlite
 import datetime
 
 
@@ -41,11 +40,10 @@ class Twitch:
             await ctx.send("Command failed, please make sure that the bot has both permissions for sending messages and using embeds in the specified channel!")
             return
 
-        async with aiosqlite.connect("data.db", timeout=10) as db:
+        async with self.bot.pool.acquire() as db:
             # add channel id for the guild to the database
-            await db.execute("UPDATE Guilds SET TwitchNotifChannel=? WHERE ID=?",
-                             (channel_obj.id, ctx.guild.id))
-            await db.commit()
+            await db.execute("UPDATE Guilds SET TwitchNotifChannel=$1 WHERE ID=$2",
+                             channel_obj.id, ctx.guild.id)
 
         await ctx.send("Successfully set Twitch notifications to " + channel_obj.mention)
 
@@ -54,12 +52,10 @@ class Twitch:
         """Subscribes to a channel
 
         Its livestreams will be announced in the specified channel"""
-        async with aiosqlite.connect("data.db") as db:
+        async with self.bot.pool.acquire() as db:
             # check if announcement channel is set up
-            cursor = await db.execute("SELECT TwitchNotifChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
-            row = await cursor.fetchall()
-            await cursor.close()
-            if len(row) == 0 or row[0][0] is None:
+            rows = await db.fetch("SELECT TwitchNotifChannel FROM Guilds WHERE ID=$1", ctx.guild.id)
+            if len(rows) == 0 or rows[0][0] is None:
                 await ctx.send("You need to set up a notifications channel before subscribing! \nUse either ;setchannel or ;surrenderat20 setchannel")
                 return
 
@@ -82,24 +78,18 @@ class Twitch:
         channel_id = ch["id"]
         channel_name = ch["display_name"]
 
-        async with aiosqlite.connect("data.db", timeout=10) as db:
+        async with self.bot.pool.acquire() as db:
             # check if twitch channel is already in database
             # otherwise add it
-            n = await db.execute("SELECT 1 FROM TwitchChannels WHERE ID=?", (channel_id,))
-            results = await n.fetchall()
-            await n.close()
+            results = await db.fetch("SELECT 1 FROM TwitchChannels WHERE ID=$1", channel_id)
             if len(results) == 0:
-                await db.execute("INSERT INTO TwitchChannels (ID, Name, LastLive) VALUES (?, ?, ?)",
-                                 (channel_id, channel_name, datetime.datetime.min.strftime('%Y-%m-%d %H:%M:%S'),))
-                await db.commit()
+                await db.execute("INSERT INTO TwitchChannels (ID, Name, LastLive) VALUES ($1, $2, $3)",
+                                 channel_id, channel_name, datetime.datetime.min.strftime('%Y-%m-%d %H:%M:%S'))
 
             # insert subscription into database
-            n = await db.execute("SELECT 1 FROM TwitchSubscriptions WHERE TwitchChannel=? AND Guild=?", (channel_id, ctx.guild.id))
-            results = await n.fetchall()
-            await n.close()
+            results = await db.fetch("SELECT 1 FROM TwitchSubscriptions WHERE TwitchChannel=$1 AND Guild=$2", channel_id, ctx.guild.id)
             if len(results) == 0:
-                await db.execute("INSERT INTO TwitchSubscriptions (TwitchChannel, Guild) VALUES (?, ?)", (channel_id, ctx.guild.id))
-                await db.commit()
+                await db.execute("INSERT INTO TwitchSubscriptions (TwitchChannel, Guild) VALUES ($1, $2)", channel_id, ctx.guild.id)
             else:
                 await ctx.send("You are already subscribed to this channel")
                 return
@@ -145,26 +135,20 @@ class Twitch:
         channel_id = ch["id"]
         channel_name = ch["display_name"]
 
-        async with aiosqlite.connect("data.db", timeout=10) as db:
+        async with self.bot.pool.acquire() as db:
             # check if server is subscribed to channel
             # remove subscription
-            n = await db.execute("SELECT 1 FROM TwitchSubscriptions WHERE TwitchChannel=? AND Guild=?", (channel_id, ctx.guild.id))
-            results = await n.fetchall()
-            await n.close()
+            results = await db.fetch("SELECT 1 FROM TwitchSubscriptions WHERE TwitchChannel=$1 AND Guild=$2", channel_id, ctx.guild.id)
             if len(results) == 1:
-                await db.execute("DELETE FROM TwitchSubscriptions WHERE TwitchChannel=? AND Guild=?", (channel_id, ctx.guild.id))
-                await db.commit()
+                await db.execute("DELETE FROM TwitchSubscriptions WHERE TwitchChannel=$1 AND Guild=$2", channel_id, ctx.guild.id)
             else:
                 await ctx.send("You are not subscribed to this channel")
                 return
 
             # remove channel from database if no server is subscribed to it anymore
-            n = await db.execute("SELECT 1 FROM TwitchSubscriptions WHERE TwitchChannel=?", (channel_id,))
-            results = await n.fetchall()
-            await n.close()
+            results = await db.fetch("SELECT 1 FROM TwitchSubscriptions WHERE TwitchChannel=$1", channel_id)
             if len(results) == 0:
-                await db.execute("DELETE FROM TwitchChannels WHERE ID=?", (channel_id,))
-                await db.commit()
+                await db.execute("DELETE FROM TwitchChannels WHERE ID=$1", channel_id)
 
         # send unsubscribe request
         parsingChannelUrl = "https://api.twitch.tv/helix/webhooks/hub"
@@ -187,15 +171,14 @@ class Twitch:
     async def _list(self, ctx):
         """Displays a list of all subscribed channels"""
         names = ""
-        async with aiosqlite.connect("data.db") as db:
-            cursor = await db.execute("SELECT TwitchChannels.Name \
+        async with self.bot.pool.acquire() as db:
+            cursor = await db.fetch("SELECT TwitchChannels.Name \
                                        FROM TwitchSubscriptions INNER JOIN TwitchChannels \
                                        ON TwitchSubscriptions.TwitchChannel=TwitchChannels.ID \
-                                       WHERE Guild=?", (ctx.guild.id,))
+                                       WHERE Guild=$1", ctx.guild.id)
 
-            async for row in cursor:
+            for row in cursor:
                 names = names + row[0] + "\n"
-            await cursor.close()
 
         emb = discord.Embed(title="Twitch subscriptions", color=discord.Colour.purple(), description=names)
         await ctx.send(embed=emb)

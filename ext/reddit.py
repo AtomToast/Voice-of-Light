@@ -1,14 +1,11 @@
 import discord
 from discord.ext import commands
 
-import aiosqlite
 import datetime
 import asyncio
 import auth_token
 import traceback
 import sys
-
-import time
 
 
 def callback(result):
@@ -29,11 +26,11 @@ class Reddit:
     async def poll(self):
         await self.bot.wait_until_ready()
 
-        while not self.bot.is_closed():
-            async with aiosqlite.connect("data.db", timeout=30) as db:
+        async with self.bot.pool.acquire() as db:
+            while not self.bot.is_closed():
                 # loop through all subreddits and check if a new post is up
-                subreddits = await db.execute("SELECT * FROM Subreddits")
-                async for row in subreddits:
+                subreddits = await db.fetch("SELECT * FROM Subreddits")
+                for row in subreddits:
                     parsingChannelUrl = f"https://www.reddit.com/r/{row[1]}/new.json"
                     parsingChannelHeader = {'cache-control': "no-cache", "User-Agent": auth_token.user_agent}
                     parsingChannelQueryString = {"sort": "new", "limit": "1"}
@@ -54,14 +51,8 @@ class Reddit:
                     # new post found
                     if submission_data["id"] != row[2] and submission_data["created_utc"] > row[3]:
                         # update last post data in database
-                        t = time.clock()
-                        print(row[1] + ": in_transaction: " + str(db.in_transaction))
-                        await db.execute("UPDATE Subreddits SET LastPostID=?, LastPostTime=? WHERE ID=?",
-                                         (submission_data["id"], submission_data["created_utc"], row[0]))
-                        print(row[1] + ": execution: " + str(time.clock() - t))
-                        print(row[1] + ": in_transaction: " + str(db.in_transaction))
-                        await db.commit()
-                        print(row[1] + ": commit: " + str(time.clock() - t))
+                        await db.execute("UPDATE Subreddits SET LastPostID=$1, LastPostTime=$2 WHERE ID=$3",
+                                         submission_data["id"], submission_data["created_utc"], row[0])
 
                         # create message embed
                         emb = discord.Embed(title=submission_data["title"],
@@ -80,12 +71,12 @@ class Reddit:
                             emb.set_image(url=submission_data["thumbnail"])
 
                         # send notification to every subscribed server
-                        channels = await db.execute("SELECT Guilds.RedditNotifChannel \
+                        channels = await db.fetch("SELECT Guilds.RedditNotifChannel \
                                                      FROM SubredditSubscriptions INNER JOIN Guilds \
                                                      ON SubredditSubscriptions.Guild=Guilds.ID \
-                                                     WHERE Subreddit=?", (row[0],))
+                                                     WHERE Subreddit=$1", row[0])
 
-                        async for ch in channels:
+                        for ch in channels:
                             announceChannel = self.bot.get_channel(ch[0])
                             try:
                                 await announceChannel.send("A new post in /r/" + row[1] + " !", embed=emb)
@@ -94,9 +85,6 @@ class Reddit:
                                 traceback.print_exception(type(ex), ex, ex.__traceback__, file=sys.stderr)
                                 pass
 
-                        await channels.close()
-
-                await subreddits.close()
                 await asyncio.sleep(1)
 
     # who and where the commands are permitted to use
@@ -129,11 +117,10 @@ class Reddit:
             await ctx.send("Command failed, please make sure that the bot has both permissions for sending messages and using embeds in the specified channel!")
             return
 
-        async with aiosqlite.connect("data.db", timeout=10) as db:
+        async with self.bot.pool.acquire() as db:
             # add channel id for the guild to the database
-            await db.execute("UPDATE Guilds SET RedditNotifChannel=? WHERE ID=?",
-                             (channel_obj.id, ctx.guild.id))
-            await db.commit()
+            await db.execute("UPDATE Guilds SET RedditNotifChannel=$1 WHERE ID=$2",
+                             channel_obj.id, ctx.guild.id)
 
         await ctx.send("Successfully set Reddit notifications to " + channel_obj.mention)
 
@@ -142,12 +129,10 @@ class Reddit:
         """Subscribes to a subreddit
 
         Its new posts will be announced in the specified channel"""
-        async with aiosqlite.connect("data.db", timeout=10) as db:
+        async with self.bot.pool.acquire() as db:
             # check if announcement channel is set up
-            cursor = await db.execute("SELECT RedditNotifChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
-            row = await cursor.fetchall()
-            await cursor.close()
-            if len(row) == 0 or row[0][0] is None:
+            rows = await db.fetch("SELECT RedditNotifChannel FROM Guilds WHERE ID=$1", ctx.guild.id)
+            if len(rows) == 0 or rows[0][0] is None:
                 await ctx.send("You need to set up a notifications channel before subscribing! \nUse either ;setchannel or ;surrenderat20 setchannel")
                 return
 
@@ -186,26 +171,20 @@ class Reddit:
 
         submission_data = submissions_obj["data"]["children"][0]["data"]
 
-        async with aiosqlite.connect("data.db", timeout=10) as db:
+        async with self.bot.pool.acquire() as db:
             # if subreddit is not yet in database, add it
-            n = await db.execute("SELECT 1 FROM Subreddits WHERE ID=?", (submission_data["subreddit_id"],))
-            results = await n.fetchall()
-            await n.close()
+            results = await db.fetch("SELECT 1 FROM Subreddits WHERE ID=$1", submission_data["subreddit_id"])
             if len(results) == 0:
-                await db.execute("INSERT INTO Subreddits (ID, Name, LastPostID, LastPostTime) VALUES (?, ?, ?, ?)",
-                                 (submission_data["subreddit_id"], submission_data["subreddit"],
-                                  submission_data["id"], submission_data["created_utc"]))
-                await db.commit()
+                await db.execute("INSERT INTO Subreddits (ID, Name, LastPostID, LastPostTime) VALUES ($1, $2, $3, $4)",
+                                 submission_data["subreddit_id"], submission_data["subreddit"],
+                                 submission_data["id"], submission_data["created_utc"])
 
             # add subscription to database
-            n = await db.execute("SELECT 1 FROM SubredditSubscriptions WHERE Subreddit=? AND Guild=?",
-                                 (submission_data["subreddit_id"], ctx.guild.id))
-            results = await n.fetchall()
-            await n.close()
+            results = await db.fetch("SELECT 1 FROM SubredditSubscriptions WHERE Subreddit=$1 AND Guild=$2",
+                                     submission_data["subreddit_id"], ctx.guild.id)
             if len(results) == 0:
-                await db.execute("INSERT INTO SubredditSubscriptions (Subreddit, Guild) VALUES (?, ?)",
-                                 (submission_data["subreddit_id"], ctx.guild.id))
-                await db.commit()
+                await db.execute("INSERT INTO SubredditSubscriptions (Subreddit, Guild) VALUES ($1, $2)",
+                                 submission_data["subreddit_id"], ctx.guild.id)
             else:
                 await ctx.send("You are already subscribed to this Subreddit")
                 return
@@ -258,27 +237,21 @@ class Reddit:
 
         submission_data = submissions_obj["data"]["children"][0]["data"]
 
-        async with aiosqlite.connect("data.db", timeout=10) as db:
+        async with self.bot.pool.acquire() as db:
             # remove subscription from database
-            n = await db.execute("SELECT 1 FROM SubredditSubscriptions WHERE Subreddit=? AND Guild=?",
-                                 (submission_data["subreddit_id"], ctx.guild.id))
-            results = await n.fetchall()
-            await n.close()
+            results = await db.fetch("SELECT 1 FROM SubredditSubscriptions WHERE Subreddit=$1 AND Guild=$2",
+                                     submission_data["subreddit_id"], ctx.guild.id)
             if len(results) == 1:
-                await db.execute("DELETE FROM SubredditSubscriptions WHERE Subreddit=? AND Guild=?",
-                                 (submission_data["subreddit_id"], ctx.guild.id))
-                await db.commit()
+                await db.execute("DELETE FROM SubredditSubscriptions WHERE Subreddit=$1 AND Guild=$2",
+                                 submission_data["subreddit_id"], ctx.guild.id)
             else:
                 await ctx.send("You are not subscribed to this Subreddit")
                 return
 
             # remove subreddit from database if no server is subscribed to it anymore
-            n = await db.execute("SELECT 1 FROM SubredditSubscriptions WHERE Subreddit=?", (submission_data["subreddit_id"],))
-            results = await n.fetchall()
-            await n.close()
+            results = await db.fetch("SELECT 1 FROM SubredditSubscriptions WHERE Subreddit=$1", submission_data["subreddit_id"])
             if len(results) == 0:
-                await db.execute("DELETE FROM Subreddits WHERE ID=?", (submission_data["subreddit_id"],))
-                await db.commit()
+                await db.execute("DELETE FROM Subreddits WHERE ID=$1", submission_data["subreddit_id"])
 
         # create message embed and send it
         emb = discord.Embed(title="Successfully unsubscribed to " + submission_data["subreddit_name_prefixed"],
@@ -292,16 +265,15 @@ class Reddit:
     async def _list(self, ctx):
         """Displays a list of all subscribed subreddits"""
         names = ""
-        async with aiosqlite.connect("data.db") as db:
+        async with self.bot.pool.acquire() as db:
             # get all subreddits the server is subscribed to
-            cursor = await db.execute("SELECT Subreddits.Name \
+            cursor = await db.fetch("SELECT Subreddits.Name \
                                        FROM SubredditSubscriptions INNER JOIN Subreddits \
                                        ON SubredditSubscriptions.Subreddit=Subreddits.ID \
-                                       WHERE Guild=?", (ctx.guild.id,))
+                                       WHERE Guild=$1", ctx.guild.id)
 
-            async for row in cursor:
+            for row in cursor:
                 names = names + row[0] + "\n"
-            await cursor.close()
 
         # create message embed and send it
         emb = discord.Embed(title="Subreddit subscriptions", color=discord.Colour.dark_blue(), description=names)

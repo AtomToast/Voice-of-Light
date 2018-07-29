@@ -4,7 +4,7 @@ from discord.ext import commands
 import traceback
 import sys
 import logging
-import aiosqlite
+import asyncpg
 import auth_token
 import aiohttp
 
@@ -39,23 +39,21 @@ async def on_ready():
 # add new guilds to database
 @bot.event
 async def on_guild_join(guild):
-    async with aiosqlite.connect("data.db") as db:
-        await db.execute("INSERT INTO Guilds (ID, Name) VALUES (?, ?)", (guild.id, guild.name))
-        await db.commit()
+    async with bot.pool.acquire() as db:
+        await db.execute("INSERT INTO Guilds (ID, Name) VALUES ($1, $2)", guild.id, guild.name)
     print(f">> Joined {guild.name}")
 
 
 # remove guild data when leaving guilds
 @bot.event
 async def on_guild_remove(guild):
-    async with aiosqlite.connect("data.db") as db:
-        await db.execute("DELETE FROM Guilds WHERE ID=?", (guild.id,))
-        await db.execute("DELETE FROM YoutubeSubscriptions WHERE Guild=?", (guild.id,))
-        await db.execute("DELETE FROM TwitchSubscriptions WHERE Guild=?", (guild.id,))
-        await db.execute("DELETE FROM SubredditSubscriptions WHERE Guild=?", (guild.id,))
-        await db.execute("DELETE FROM Keywords WHERE Guild=?", (guild.id,))
-        await db.execute("DELETE FROM SurrenderAt20Subscriptions WHERE Guild=?", (guild.id,))
-        await db.commit()
+    async with bot.pool.acquire() as db:
+        await db.execute("DELETE FROM Guilds WHERE ID=$1", guild.id)
+        await db.execute("DELETE FROM YoutubeSubscriptions WHERE Guild=$1", guild.id)
+        await db.execute("DELETE FROM TwitchSubscriptions WHERE Guild=$1", guild.id)
+        await db.execute("DELETE FROM SubredditSubscriptions WHERE Guild=$1", guild.id)
+        await db.execute("DELETE FROM Keywords WHERE Guild=$1", guild.id)
+        await db.execute("DELETE FROM SurrenderAt20Subscriptions WHERE Guild=$1", guild.id)
     print(f"<< Left {guild.name}")
 
 
@@ -102,6 +100,7 @@ async def on_command_error(ctx, error):
 @bot.command(hidden=True)
 async def kill(ctx):
     await ctx.send(":(")
+    await bot.pool.close()
     ws = bot.get_cog("Webserver")
     await ws.site.stop()
     await ws.runner.cleanup()
@@ -112,6 +111,7 @@ async def kill(ctx):
 
 
 if __name__ == "__main__":
+    bot.pool = bot.loop.run_until_complete(asyncpg.create_pool(database="voiceoflightdb", loop=bot.loop, command_timeout=60))
     for ext in extensions:
         bot.load_extension(ext)
     bot.run(auth_token.discord)

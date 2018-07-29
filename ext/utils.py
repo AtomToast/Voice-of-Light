@@ -1,8 +1,6 @@
 import discord
 from discord.ext import commands
 
-import aiosqlite
-
 
 class Utils:
     """Utility commands"""
@@ -36,11 +34,10 @@ class Utils:
             await ctx.send("Command failed, please make sure that the bot has both permissions for sending messages and using embeds in the specified channel!")
             return
 
-        async with aiosqlite.connect("data.db", timeout=10) as db:
+        async with self.bot.pool.acquire() as db:
             # add channel id for the guild to the database
-            await db.execute("UPDATE Guilds SET SurrenderAt20NotifChannel=?, TwitchNotifChannel=?, YoutubeNotifChannel=?, RedditNotifChannel=? WHERE ID=?",
-                             (channel_obj.id, channel_obj.id, channel_obj.id, channel_obj.id, ctx.guild.id))
-            await db.commit()
+            await db.execute("UPDATE Guilds SET SurrenderAt20NotifChannel=$1, TwitchNotifChannel=$2, YoutubeNotifChannel=$3, RedditNotifChannel=$4 WHERE ID=$5",
+                             channel_obj.id, channel_obj.id, channel_obj.id, channel_obj.id, ctx.guild.id)
 
         await ctx.send("Successfully set all notifications to " + channel_obj.mention)
 

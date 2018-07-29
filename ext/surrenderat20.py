@@ -1,7 +1,6 @@
 import discord
 from discord.ext import commands
 
-import aiosqlite
 import auth_token
 import datetime
 import re
@@ -43,11 +42,10 @@ class SurrenderAt20:
             await ctx.send("Command failed, please make sure that the bot has both permissions for sending messages and using embeds in the specified channel!")
             return
 
-        async with aiosqlite.connect("data.db", timeout=10) as db:
+        async with self.bot.pool.acquire() as db:
             # add channel id for the guild to the database
-            await db.execute("UPDATE Guilds SET SurrenderAt20NotifChannel=? WHERE ID=?",
-                             (channel_obj.id, ctx.guild.id))
-            await db.commit()
+            await db.execute("UPDATE Guilds SET SurrenderAt20NotifChannel=$1 WHERE ID=$2",
+                             channel_obj.id, ctx.guild.id)
 
         await ctx.send("Successfully set Surrender@20 notifications to " + channel_obj.mention)
 
@@ -63,18 +61,14 @@ class SurrenderAt20:
         - Rotations
         - Esports
         - Releases"""
-        async with aiosqlite.connect("data.db", timeout=10) as db:
+        async with self.bot.pool.acquire() as db:
             # check if announcement channel is set up
-            cursor = await db.execute("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
-            row = await cursor.fetchall()
-            await cursor.close()
-            if len(row) == 0 or row[0][0] is None:
+            rows = await db.fetch("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=$1", ctx.guild.id)
+            if len(rows) == 0 or rows[0][0] is None:
                 await ctx.send("You need to set up a notifications channel before subscribing! \nUse either ;setchannel or ;surrenderat20 setchannel")
                 return
 
-            n = await db.execute("SELECT * FROM SurrenderAt20Subscriptions WHERE Guild=?", (ctx.guild.id,))
-            results = await n.fetchall()
-            await n.close()
+            results = await db.fetch("SELECT * FROM SurrenderAt20Subscriptions WHERE Guild=$1", ctx.guild.id)
 
             if len(results) == 1:
                 if categories is None:
@@ -107,10 +101,9 @@ class SurrenderAt20:
 
                 # enter information into database
                 await db.execute("UPDATE SurrenderAt20Subscriptions \
-                                  SET RedPosts=?, PBE=?, Rotations=?, Esports=?, Releases=? \
-                                  WHERE Guild=?",
-                                 (redposts, pbe, rotations, esports, releases, ctx.guild.id))
-                await db.commit()
+                                  SET RedPosts=$1, PBE=$2, Rotations=$3, Esports=$4, Releases=$5 \
+                                  WHERE Guild=$6",
+                                 redposts, pbe, rotations, esports, releases, ctx.guild.id)
 
             else:
                 # if nothing is specified, subscribe to everything
@@ -137,9 +130,8 @@ class SurrenderAt20:
 
                 # enter information into database
                 await db.execute("INSERT INTO SurrenderAt20Subscriptions (Guild, RedPosts, PBE, Rotations, Esports, Releases) \
-                                 VALUES (?, ?, ?, ?, ?, ?)",
-                                 (ctx.guild.id, redposts, pbe, rotations, esports, releases))
-                await db.commit()
+                                 VALUES ($1, $2, $3, $4, $5, $6)",
+                                 ctx.guild.id, redposts, pbe, rotations, esports, releases)
 
         # create message embed and send response
         emb = discord.Embed(title="Successfully subscribed to " + categories.title(),
@@ -160,10 +152,8 @@ class SurrenderAt20:
         - Rotations
         - Esports
         - Releases"""
-        async with aiosqlite.connect("data.db", timeout=10) as db:
-            n = await db.execute("SELECT * FROM SurrenderAt20Subscriptions WHERE Guild=?", (ctx.guild.id,))
-            results = await n.fetchall()
-            await n.close()
+        async with self.bot.pool.acquire() as db:
+            results = await db.fetch("SELECT * FROM SurrenderAt20Subscriptions WHERE Guild=$1", ctx.guild.id)
             if len(results) == 0:
                 await ctx.send("You are not subscribed to any categories")
                 return
@@ -171,8 +161,7 @@ class SurrenderAt20:
             # if nothing is specified, unsubscribe from everything
             if categories is None:
                 categories = "all categories"
-                await db.execute("DELETE FROM SurrenderAt20Subscriptions WHERE Guild=?", (ctx.guild.id,))
-                await db.commit()
+                await db.execute("DELETE FROM SurrenderAt20Subscriptions WHERE Guild=$1", ctx.guild.id)
             else:
                 categories = categories.lower()
                 # return error if no categories are no found but they are also not None
@@ -196,10 +185,9 @@ class SurrenderAt20:
 
                 # enter information into database
                 await db.execute("UPDATE SurrenderAt20Subscriptions \
-                                  SET RedPosts=?, PBE=?, Rotations=?, Esports=?, Releases=? \
-                                  WHERE Guild=?",
-                                 (redposts, pbe, rotations, esports, releases, ctx.guild.id))
-                await db.commit()
+                                  SET RedPosts=$1, PBE=$2, Rotations=$3, Esports=$4, Releases=$5 \
+                                  WHERE Guild=$6",
+                                 redposts, pbe, rotations, esports, releases, ctx.guild.id)
 
         # create message embed and send response
         emb = discord.Embed(title="Successfully unsubscribed from " + categories.title(),
@@ -211,12 +199,10 @@ class SurrenderAt20:
     @surrenderat20.command(aliases=["add"])
     async def add_keyword(self, ctx, *, keyword=None):
         """Adds a keyword to search for"""
-        async with aiosqlite.connect("data.db", timeout=10) as db:
+        async with self.bot.pool.acquire() as db:
             # check if announcement channel is set up
-            cursor = await db.execute("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
-            row = await cursor.fetchall()
-            await cursor.close()
-            if len(row) == 0:
+            rows = await db.fetch("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=$1", ctx.guild.id)
+            if len(rows) == 0 or rows[0][0] is None:
                 await ctx.send("You need to set up a notifications channel before subscribing to any channels")
                 return
 
@@ -226,18 +212,15 @@ class SurrenderAt20:
 
         kw = keyword.lower()
 
-        async with aiosqlite.connect("data.db", timeout=10) as db:
+        async with self.bot.pool.acquire() as db:
             # add keyword for the guild to database if it doesn't already exist
-            cursor = await db.execute("SELECT * FROM Keywords WHERE Keyword=? AND Guild=?", (kw, ctx.guild.id))
-            results = await cursor.fetchall()
-            await cursor.close()
+            results = await db.fetch("SELECT * FROM Keywords WHERE Keyword=$1 AND Guild=$2", kw, ctx.guild.id)
 
             if len(results) > 0:
                 await ctx.send("This keyword already exists!")
                 return
 
-            await db.execute("INSERT INTO Keywords (Keyword, Guild) VALUES (?, ?)", (kw, ctx.guild.id))
-            await db.commit()
+            await db.execute("INSERT INTO Keywords (Keyword, Guild) VALUES ($1, $2)", kw, ctx.guild.id)
 
         await ctx.send("Successfully added keyword '" + kw + "'")
 
@@ -250,18 +233,15 @@ class SurrenderAt20:
 
         kw = keyword.lower()
 
-        async with aiosqlite.connect("data.db", timeout=10) as db:
+        async with self.bot.pool.acquire() as db:
             # remove keyword for guild from database
-            cursor = await db.execute("SELECT * FROM Keywords WHERE Keyword=? AND Guild=?", (kw, ctx.guild.id))
-            results = await cursor.fetchall()
-            await cursor.close()
+            results = await db.fetch("SELECT * FROM Keywords WHERE Keyword=$1 AND Guild=$2", kw, ctx.guild.id)
 
             if len(results) == 0:
                 await ctx.send("This keyword does not exist!")
                 return
 
-            await db.execute("DELETE FROM Keywords WHERE Keyword=? AND Guild=?", (kw, ctx.guild.id))
-            await db.commit()
+            await db.execute("DELETE FROM Keywords WHERE Keyword=$1 AND Guild=$2", kw, ctx.guild.id)
 
         await ctx.send("Successfully removed keyword '" + kw + "'")
 
@@ -270,11 +250,9 @@ class SurrenderAt20:
         """Displays a list of all Keywords"""
         keywords = ""
         categories = ""
-        async with aiosqlite.connect("data.db") as db:
+        async with self.bot.pool.acquire() as db:
             # get all subscribed categories of the guild
-            cursor = await db.execute("SELECT * FROM SurrenderAt20Subscriptions WHERE Guild=?", (ctx.guild.id,))
-            subscriptions = await cursor.fetchone()
-            await cursor.close()
+            subscriptions = await db.fetchrow("SELECT * FROM SurrenderAt20Subscriptions WHERE Guild=$1", ctx.guild.id)
 
             if subscriptions is None:
                 categories = "-"
@@ -294,11 +272,10 @@ class SurrenderAt20:
                     categories = "-"
 
             # get all keywords of the guild
-            cursor = await db.execute("SELECT Keyword FROM Keywords WHERE Guild=?", (ctx.guild.id,))
+            cursor = await db.fetch("SELECT Keyword FROM Keywords WHERE Guild=$1", ctx.guild.id)
 
-            async for row in cursor:
+            for row in cursor:
                 keywords = keywords + row[0] + "\n"
-            await cursor.close()
 
             if keywords == "":
                 keywords = "-"
@@ -312,12 +289,10 @@ class SurrenderAt20:
     @surrenderat20.command()
     async def latest(self, ctx):
         """Sends the lastest Post"""
-        async with aiosqlite.connect("data.db") as db:
+        async with self.bot.pool.acquire() as db:
             # check if announcement channel is set up
-            cursor = await db.execute("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
-            row = await cursor.fetchall()
-            await cursor.close()
-            if len(row) == 0:
+            rows = await db.fetch("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=$1", ctx.guild.id)
+            if len(rows) == 0 or rows[0][0] is None:
                 await ctx.send("You need to set up a notifications channel before fetching the latest post")
                 return
 
@@ -352,9 +327,9 @@ class SurrenderAt20:
 
             emb.set_image(url=linkTag)
 
-        async with aiosqlite.connect("data.db") as db:
-            keywords = await db.execute("SELECT Keyword FROM Keywords WHERE Guild=?", (ctx.guild.id,))
-            async for keyword in keywords:
+        async with self.bot.pool.acquire() as db:
+            keywords = await db.fetch("SELECT Keyword FROM Keywords WHERE Guild=$1", ctx.guild.id)
+            for keyword in keywords:
                 kw = " " + keyword[0] + " "
                 # check if keyword appears in post
                 brokentext = content.replace("<br />", "\n")
@@ -372,13 +347,10 @@ class SurrenderAt20:
                         exctrats_string = exctrats_string[:950] + "... `" + str(cleantext.lower().count(kw)) + "` mentions in total"
 
                     emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value=exctrats_string, inline=False)
-            await keywords.close()
 
             # send post
-            channels = await db.execute("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=?", (ctx.guild.id,))
-            channel_id = await channels.fetchone()
-            await channels.close()
-            channel = self.bot.get_channel(channel_id[0])
+            channels = await db.fetchrow("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=$1", ctx.guild.id)
+            channel = self.bot.get_channel(channels[0])
             await channel.send("New Surrender@20 post!", embed=emb)
         await ctx.send("Sent latest post into " + channel.mention)
 
