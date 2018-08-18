@@ -4,6 +4,7 @@ from discord.ext import commands
 import traceback
 import sys
 import logging
+import asyncio
 import asyncpg
 import auth_token
 import aiohttp
@@ -100,12 +101,16 @@ async def on_command_error(ctx, error):
 @bot.command(hidden=True)
 async def kill(ctx):
     await ctx.send(":(")
-    await bot.pool.close()
     ws = bot.get_cog("Webserver")
     await ws.site.stop()
     await ws.runner.cleanup()
     rd = bot.get_cog("Reddit")
     rd.reddit_poller.cancel()
+    try:
+        await asyncio.wait_for(bot.pool.close(), 10.0)
+    except asyncio.TimeoutError:
+        await bot.pool.expire_connections()
+        bot.pool.terminate()
     await bot.session.close()
     await bot.close()
 
