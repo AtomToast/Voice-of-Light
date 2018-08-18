@@ -27,7 +27,7 @@ class Webserver:
 
         # push notification run out after a specified time so I need to refresh them regularly
         self.scheduler = AsyncIOScheduler(event_loop=self.bot.loop)
-        self.scheduler.add_job(self.refresh_subscriptions, "interval", days=1, id="refresher", replace_existing=True, next_run_time=datetime.datetime.now())
+        self.scheduler.add_job(self.refresh_subscriptions, "interval", days=3, id="refresher", replace_existing=True, next_run_time=datetime.datetime.now())
         self.scheduler.add_job(self.ping_feedburner, "interval", minutes=3, id="pinger", replace_existing=True)
         self.scheduler.start()
 
@@ -59,7 +59,7 @@ class Webserver:
                 async with self.bot.session.post(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
                     if resp.status != 202:
                         print(resp.text)
-                await asyncio.sleep(1.5)
+                await asyncio.sleep(2)
 
             cursor = await db.fetch("SELECT DISTINCT YoutubeChannel FROM YoutubeSubscriptions")
             for row in cursor:
@@ -70,7 +70,7 @@ class Webserver:
                 async with self.bot.session.post(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
                     if resp.status != 202:
                         print(resp.text)
-                await asyncio.sleep(1.5)
+                await asyncio.sleep(2)
 
     # pings feedburner to update feed
     async def ping_feedburner(self):
@@ -233,7 +233,7 @@ class Webserver:
                 while len(dt_str.split("-")[0]) < 4:
                     dt_str = "0" + dt_str
                 if (datetime.datetime.utcnow() - datetime.datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')).total_seconds() > 60 * 60:
-                    await db.execute("UPDATE TwitchChannels SET LastLive=$1 WHERE ID=$2", datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'), ch["id"])
+                    await db.execute("UPDATE TwitchChannels SET LastLive=$1 WHERE ID=$2", datetime.datetime.utcnow(), ch["id"])
                 else:
                     # stream was restarted
                     return web.Response()
