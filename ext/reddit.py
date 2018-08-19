@@ -137,7 +137,7 @@ class Reddit:
                 return
 
         if subreddit is None:
-            await ctx.send("You need to spefify a subreddit to subscribe to")
+            await ctx.send("You need to specify a subreddit to subscribe to")
             return
 
         sr = subreddit.replace("/r/", "").replace("r/", "")

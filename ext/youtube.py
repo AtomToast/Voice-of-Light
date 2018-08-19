@@ -63,7 +63,7 @@ class Youtube:
                 return
 
         if channel is None:
-            await ctx.send("You need to spefify a channel to subscribe to")
+            await ctx.send("You need to specify a channel to subscribe to")
             return
 
         # check if the subscription should be set to "only streams", ignoring videos

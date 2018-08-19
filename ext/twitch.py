@@ -60,7 +60,7 @@ class Twitch:
                 return
 
         if channel is None:
-            await ctx.send("You need to spefify a channel to subscribe to")
+            await ctx.send("You need to specify a channel to subscribe to")
             return
 
         # trying to get channel data
