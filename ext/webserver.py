@@ -89,14 +89,14 @@ class Webserver:
 
     # handler for post requests to the /youtube route
     async def youtube(self, request):
-        youtube_notifs = self.bot.loop.create_task(self.youtube_notifs(request))
+        obj = xmltodict.parse(await request.text())
+        youtube_notifs = self.bot.loop.create_task(self.youtube_notifs(obj))
         youtube_notifs.add_done_callback(callback)
 
         return web.Response()
 
     # handles the actual request to result in a timely response
-    async def youtube_notifs(self, request):
-        obj = xmltodict.parse(await request.text())
+    async def youtube_notifs(self, obj):
         # to check if the notification is about a video being deleted
         try:
             # if the request contains a "at:deleted-entry" parameter it is
@@ -190,14 +190,14 @@ class Webserver:
 
     # handler for post requests to the /twitch route
     async def twitch(self, request):
-        twitch_notifs = self.bot.loop.create_task(self.twitch_notifs(request))
+        obj = await request.json()
+        twitch_notifs = self.bot.loop.create_task(self.twitch_notifs(obj))
         twitch_notifs.add_done_callback(callback)
 
         return web.Response()
 
     # handles the actual request to result in a timely response
-    async def twitch_notifs(self, request):
-        obj = await request.json()
+    async def twitch_notifs(self, obj):
         # check if it's a "stream down" notification, it does not contain any content
         if len(obj["data"]) == 0:
             # stream down
@@ -265,14 +265,14 @@ class Webserver:
 
     # handler for post requests to the /surrenderat20 route
     async def surrenderat20(self, request):
-        ff20_notifs = self.bot.loop.create_task(self.surrenderat20_notifs(request))
+        obj = await request.json()
+        ff20_notifs = self.bot.loop.create_task(self.surrenderat20_notifs(obj))
         ff20_notifs.add_done_callback(callback)
 
         return web.Response()
 
     # handles the actual request to result in a timely response
-    async def surrenderat20_notifs(self, request):
-        obj = await request.json()
+    async def surrenderat20_notifs(self, obj):
         item = obj["items"][0]
 
         emb = discord.Embed(title=item["title"],
@@ -343,11 +343,11 @@ class Webserver:
                                 extracts.append(part.strip())
 
                         # create message embed and send it to the server
-                        exctrats_string = "\n\n".join(extracts)
-                        if len(exctrats_string) > 950:
-                            exctrats_string = exctrats_string[:950] + "... `" + str(cleantext.lower().count(kw)) + "` mentions in total"
+                        exctracts_string = "\n\n".join(extracts)
+                        if len(exctracts_string) > 950:
+                            exctracts_string = exctracts_string[:950] + "... `" + str(cleantext.lower().count(kw)) + "` mentions in total"
 
-                        guild_emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value=exctrats_string, inline=False)
+                        guild_emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value=exctracts_string, inline=False)
 
                 channels = await db.fetchrow("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=$1", guild_subscriptions[0])
                 channel = self.bot.get_channel(channels[0])
