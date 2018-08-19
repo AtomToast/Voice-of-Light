@@ -12,8 +12,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 
 def callback(result):
-        ex = result.exception()
-        print('Ignoring exception in Reddit.poll()', file=sys.stderr)
+    ex = result.exception()
+    if ex is not None:
         traceback.print_exception(type(ex), ex, ex.__traceback__, file=sys.stderr)
 
 
@@ -243,11 +243,8 @@ class Webserver:
         async with self.bot.pool.acquire() as db:
             # streams should only be announced every hour
             # to keep channels from getting spammed with stream restarts
-            dt = await db.fetch("SELECT LastLive FROM TwitchChannels WHERE ID=$1", ch["id"])
-            dt_str = dt[0][0]
-            while len(dt_str.split("-")[0]) < 4:
-                dt_str = "0" + dt_str
-            if (datetime.datetime.utcnow() - datetime.datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')).total_seconds() > 60 * 60:
+            dt = await db.fetchval("SELECT LastLive FROM TwitchChannels WHERE ID=$1", ch["id"])
+            if (datetime.datetime.utcnow() - dt).total_seconds() > 60 * 60:
                 await db.execute("UPDATE TwitchChannels SET LastLive=$1 WHERE ID=$2", datetime.datetime.utcnow(), ch["id"])
             else:
                 # stream was restarted
