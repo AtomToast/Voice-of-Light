@@ -92,6 +92,12 @@ async def on_command_error(ctx, error):
         except Exception:
             pass
 
+    elif isinstance(error, discord.errors.Forbidden):
+        try:
+            return await ctx.message.add_reaction("🔇")
+        except Exception:
+            pass
+
     print('Ignoring exception in command {}:'.format(ctx.command), file=sys.stderr)
     traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
 
