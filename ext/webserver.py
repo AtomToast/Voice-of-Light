@@ -331,7 +331,6 @@ class Webserver:
                 else:
                     continue
 
-                guild_emb = emb
                 keywords = await db.fetch("SELECT Keyword FROM Keywords WHERE Guild=$1", guild_subscriptions[0])
                 print(guild_subscriptions[0], keywords)
                 for keyword in keywords:
@@ -351,11 +350,12 @@ class Webserver:
                         if len(exctracts_string) > 950:
                             exctracts_string = exctracts_string[:950] + "... `" + str(cleantext.lower().count(kw)) + "` mentions in total"
 
-                        guild_emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value=exctracts_string, inline=False)
+                        emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value=exctracts_string, inline=False)
 
                 channels = await db.fetchrow("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=$1", guild_subscriptions[0])
                 channel = self.bot.get_channel(channels[0])
-                await channel.send("New Surrender@20 post!", embed=guild_emb)
+                await channel.send("New Surrender@20 post!", embed=emb)
+                emb.clear_fields()
 
     # various verification endpoints
     # will verify the url as my own to google
