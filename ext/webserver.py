@@ -332,7 +332,6 @@ class Webserver:
                     continue
 
                 keywords = await db.fetch("SELECT Keyword FROM Keywords WHERE Guild=$1", guild_subscriptions[0])
-                print(guild_subscriptions[0], keywords)
                 for keyword in keywords:
                     kw = " " + keyword[0] + " "
                     # check if keyword appears in post
