@@ -35,7 +35,7 @@ class Webserver:
 
         # push notification run out after a specified time so I need to refresh them regularly
         self.scheduler = AsyncIOScheduler(event_loop=self.bot.loop)
-        self.scheduler.add_job(self.refresh_subscriptions, "interval", days=3, id="refresher", replace_existing=True, next_run_time=datetime.datetime.now())
+        self.scheduler.add_job(self.refresh_subscriptions, "interval", days=3, id="refresher", replace_existing=True, next_run_time=datetime.datetime.utcnow())
         self.scheduler.add_job(self.ping_feedburner, "interval", minutes=3, id="pinger", replace_existing=True)
         self.scheduler.start()
 
@@ -155,9 +155,10 @@ class Webserver:
             # to keep channels from getting spammed from stream restarts
             if video["liveBroadcastContent"] == "live":
                 dt = await db.fetchval("SELECT LastLive FROM YoutubeChannels WHERE ID=$1", obj["feed"]["entry"]["yt:channelId"])
-                if ((datetime.datetime.utcnow() - dt).total_seconds() > 60 * 60):
+                now = datetime.datetime.now(datetime.timezone.utc)
+                if ((now - dt).total_seconds() > 60 * 60):
                     await db.execute("UPDATE YoutubeChannels SET LastLive=$1 WHERE ID=$2",
-                                     datetime.datetime.utcnow(), obj["feed"]["entry"]["yt:channelId"])
+                                     now, obj["feed"]["entry"]["yt:channelId"])
                 else:
                     # stream was restarted
                     return web.Response()
@@ -244,8 +245,9 @@ class Webserver:
             # streams should only be announced every hour
             # to keep channels from getting spammed with stream restarts
             dt = await db.fetchval("SELECT LastLive FROM TwitchChannels WHERE ID=$1", ch["id"])
-            if (datetime.datetime.utcnow() - dt).total_seconds() > 60 * 60:
-                await db.execute("UPDATE TwitchChannels SET LastLive=$1 WHERE ID=$2", datetime.datetime.utcnow(), ch["id"])
+            now = datetime.datetime.now(datetime.timezone.utc)
+            if (now - dt).total_seconds() > 60 * 60:
+                await db.execute("UPDATE TwitchChannels SET LastLive=$1 WHERE ID=$2", now, ch["id"])
             else:
                 # stream was restarted
                 return web.Response()
@@ -297,8 +299,12 @@ class Webserver:
         if(startImgPos > -1):
             endImgPos = content.find('>', startImgPos, len(content))
             imageTag = content[startImgPos:endImgPos]
-            startSrcPos = imageTag.find('src="', 0, len(content)) + 5
-            endSrcPos = imageTag.find('"', startSrcPos, len(content))
+            if "'" in imageTag:
+                apostrophe = "'"
+            else:
+                apostrophe = '"'
+            startSrcPos = imageTag.find('src=' + apostrophe, 0, len(content)) + 5
+            endSrcPos = imageTag.find(apostrophe, startSrcPos, len(content))
             linkTag = imageTag[startSrcPos:endSrcPos]
 
             emb.set_image(url=linkTag)
@@ -327,6 +333,7 @@ class Webserver:
 
                 guild_emb = emb
                 keywords = await db.fetch("SELECT Keyword FROM Keywords WHERE Guild=$1", guild_subscriptions[0])
+                print(guild_subscriptions[0], keywords)
                 for keyword in keywords:
                     kw = " " + keyword[0] + " "
                     # check if keyword appears in post

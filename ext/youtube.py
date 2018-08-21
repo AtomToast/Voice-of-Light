@@ -110,8 +110,10 @@ class Youtube:
             # check if youtube channel is already in database, otherwise add it
             results = await db.fetch("SELECT 1 FROM YoutubeChannels WHERE ID=$1", channel_id)
             if len(results) == 0:
+                dt = datetime.datetime.min
+                dt.replace(tzinfo=datetime.timezone.utc)
                 await db.execute("INSERT INTO YoutubeChannels (ID, Name, LastLive, LastVideoID, VideoCount) VALUES ($1, $2, $3, $4, $5)",
-                                 channel_id, channel_name, datetime.datetime.min, videoID, videoCount)
+                                 channel_id, channel_name, dt, videoID, videoCount)
 
             # insert subscription into the database
             results = await db.fetch("SELECT 1 FROM YoutubeSubscriptions WHERE YoutubeChannel=$1 AND Guild=$2", channel_id, ctx.guild.id)

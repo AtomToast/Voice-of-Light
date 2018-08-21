@@ -83,8 +83,10 @@ class Twitch:
             # otherwise add it
             results = await db.fetch("SELECT 1 FROM TwitchChannels WHERE ID=$1", channel_id)
             if len(results) == 0:
+                dt = datetime.datetime.min
+                dt.replace(tzinfo=datetime.timezone.utc)
                 await db.execute("INSERT INTO TwitchChannels (ID, Name, LastLive) VALUES ($1, $2, $3)",
-                                 channel_id, channel_name, datetime.datetime.min)
+                                 channel_id, channel_name, dt)
 
             # insert subscription into database
             results = await db.fetch("SELECT 1 FROM TwitchSubscriptions WHERE TwitchChannel=$1 AND Guild=$2", channel_id, ctx.guild.id)
