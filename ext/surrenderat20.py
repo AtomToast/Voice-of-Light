@@ -89,15 +89,15 @@ class SurrenderAt20:
                     redposts, pbe, rotations, esports, releases = result[1:]
                     # looks for each category and update boolean variable for it
                     if "red posts" in categories:
-                        redposts = 1
+                        redposts = True
                     if "pbe" in categories:
-                        pbe = 1
+                        pbe = True
                     if "rotations" in categories:
-                        rotations = 1
+                        rotations = True
                     if "esports" in categories:
-                        esports = 1
+                        esports = True
                     if "releases" in categories:
-                        releases = 1
+                        releases = True
 
                 # enter information into database
                 await db.execute("UPDATE SurrenderAt20Subscriptions \
@@ -173,15 +173,15 @@ class SurrenderAt20:
                 redposts, pbe, rotations, esports, releases = result[1:]
                 # looks for each category and update boolean variable for it
                 if "red posts" in categories:
-                    redposts = 0
+                    redposts = False
                 if "pbe" in categories:
-                    pbe = 0
+                    pbe = False
                 if "rotations" in categories:
-                    rotations = 0
+                    rotations = False
                 if "esports" in categories:
-                    esports = 0
+                    esports = False
                 if "releases" in categories:
-                    releases = 0
+                    releases = False
 
                 # enter information into database
                 await db.execute("UPDATE SurrenderAt20Subscriptions \
