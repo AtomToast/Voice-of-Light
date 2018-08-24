@@ -340,7 +340,7 @@ class Webserver:
                     if kw in cleantext.lower():
                         extracts = []
                         # find paragraphs with keyword
-                        for part in cleantext.split("\n\n"):
+                        for part in cleantext.split("\n"):
                             if kw in part.lower():
                                 extracts.append(part.strip())
 
