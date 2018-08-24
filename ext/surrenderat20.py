@@ -257,15 +257,15 @@ class SurrenderAt20:
             if subscriptions is None:
                 categories = "-"
             else:
-                if subscriptions[1] == 1:
+                if subscriptions[1]:
                     categories = categories + "Red Posts\n"
-                if subscriptions[2] == 1:
+                if subscriptions[2]:
                     categories = categories + "PBE\n"
-                if subscriptions[3] == 1:
+                if subscriptions[3]:
                     categories = categories + "Rotations\n"
-                if subscriptions[4] == 1:
+                if subscriptions[4]:
                     categories = categories + "Esports\n"
-                if subscriptions[5] == 1:
+                if subscriptions[5]:
                     categories = categories + "Releases\n"
 
                 if categories == "":
