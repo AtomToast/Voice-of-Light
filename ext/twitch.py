@@ -84,7 +84,7 @@ class Twitch:
             results = await db.fetch("SELECT 1 FROM TwitchChannels WHERE ID=$1", channel_id)
             if len(results) == 0:
                 dt = datetime.datetime.min
-                dt.replace(tzinfo=datetime.timezone.utc)
+                dt = dt.replace(tzinfo=datetime.timezone.utc)
                 await db.execute("INSERT INTO TwitchChannels (ID, Name, LastLive) VALUES ($1, $2, $3)",
                                  channel_id, channel_name, dt)
 
