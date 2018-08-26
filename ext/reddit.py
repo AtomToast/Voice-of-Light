@@ -55,7 +55,11 @@ class Reddit:
                                          submission_data["id"], submission_data["created_utc"], row[0])
 
                         # create message embed
-                        emb = discord.Embed(title=submission_data["title"],
+                        if len(submission_data["title"]) > 256:
+                            title = submission_data["title"][:256]
+                        else:
+                            title = submission_data["title"]
+                        emb = discord.Embed(title=title,
                                             color=discord.Colour.dark_blue(),
                                             url="https://www.reddit.com" + submission_data["permalink"])
                         emb.timestamp = datetime.datetime.utcnow()
@@ -111,8 +115,8 @@ class Reddit:
             await ctx.send("Missing channel parameter")
             return
 
-        bot_id = ctx.guild.get_member(self.bot.user.id)
-        permissions = channel_obj.permissions_for(bot_id)
+        bot_member = ctx.guild.get_member(self.bot.user.id)
+        permissions = channel_obj.permissions_for(bot_member)
         if not permissions.send_messages or not permissions.embed_links:
             await ctx.send("Command failed, please make sure that the bot has both permissions for sending messages and using embeds in the specified channel!")
             return
