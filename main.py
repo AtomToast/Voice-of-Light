@@ -121,6 +121,7 @@ async def kill(ctx):
     await bot.close()
 
 
+# fetch guilds and add guilds, not yet in database
 @commands.is_owner()
 @bot.command(hidden=True)
 async def fetchguilds(ctx):
@@ -138,6 +139,7 @@ async def fetchguilds(ctx):
     await ctx.send("Done fetching guilds!")
 
 
+# send an announcement to all servers the bot is on
 @commands.is_owner()
 @bot.command(hidden=True)
 async def announce(ctx, *, message):
@@ -146,19 +148,23 @@ async def announce(ctx, *, message):
         for g in guilds_db:
             if g[2] is not None:
                 channel = bot.get_channel(g[2])
+                await channel.send("```" + message + "```")
             elif g[3] is not None:
                 channel = bot.get_channel(g[3])
+                await channel.send("```" + message + "```")
             elif g[4] is not None:
                 channel = bot.get_channel(g[4])
+                await channel.send("```" + message + "```")
             elif g[5] is not None:
                 channel = bot.get_channel(g[5])
+                await channel.send("```" + message + "```")
             else:
                 guild = bot.get_guild(g[0])
                 for ch in guild.text_channels:
-                    bot_member = ctx.guild.get_member(bot.user.id)
+                    bot_member = guild.get_member(bot.user.id)
                     permissions = ch.permissions_for(bot_member)
                     if permissions.send_messages:
-                        await channel.send(message)
+                        await channel.send("```" + message + "```")
                         break
 
     await ctx.send("Announcement sent!")
