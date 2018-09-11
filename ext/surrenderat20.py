@@ -78,32 +78,30 @@ class SurrenderAt20:
                     rotations = True
                     esports = True
                     releases = True
+                    other = True
                 else:
                     categories = categories.lower()
                     # return error if no categories are no found but they are also not None
-                    if "red posts" not in categories and "pbe" not in categories and "rotations" not in categories and "esports" not in categories and "releases" not in categories:
+                    if "red posts" not in categories and "pbe" not in categories and "rotations" not in categories and "esports" not in categories and "releases" not in categories and "other" not in categories:
                         await ctx.send("No categories found, potentially check for typos")
                         return
 
                     result = results[0]
-                    redposts, pbe, rotations, esports, releases = result[1:]
+                    redposts, pbe, rotations, esports, releases, other = result[1:7]
                     # looks for each category and update boolean variable for it
-                    if "red posts" in categories:
-                        redposts = True
-                    if "pbe" in categories:
-                        pbe = True
-                    if "rotations" in categories:
-                        rotations = True
-                    if "esports" in categories:
-                        esports = True
-                    if "releases" in categories:
-                        releases = True
+                    categories = categories.lower()
+                    redposts = "red posts" in categories
+                    pbe = "pbe" in categories
+                    rotations = "rotations" in categories
+                    esports = "esports" in categories
+                    releases = "releases" in categories
+                    other = "other" in categories
 
                 # enter information into database
                 await db.execute("UPDATE SurrenderAt20Subscriptions \
-                                  SET RedPosts=$1, PBE=$2, Rotations=$3, Esports=$4, Releases=$5 \
-                                  WHERE Guild=$6",
-                                 redposts, pbe, rotations, esports, releases, ctx.guild.id)
+                                  SET RedPosts=$1, PBE=$2, Rotations=$3, Esports=$4, Releases=$5, Other=$6 \
+                                  WHERE Guild=$7",
+                                 redposts, pbe, rotations, esports, releases, other, ctx.guild.id)
 
             else:
                 # if nothing is specified, subscribe to everything
@@ -114,6 +112,7 @@ class SurrenderAt20:
                     rotations = True
                     esports = True
                     releases = True
+                    other = True
                 else:
                     # looks for each category and sets a boolean variable for it
                     categories = categories.lower()
@@ -122,15 +121,16 @@ class SurrenderAt20:
                     rotations = "rotations" in categories
                     esports = "esports" in categories
                     releases = "releases" in categories
+                    other = "other" in categories
 
                     # return error if no categories are no found but they are also not None
-                    if not redposts and not pbe and not rotations and not esports and not releases:
+                    if not redposts and not pbe and not rotations and not esports and not releases and not other:
                         await ctx.send("No categories found, potentially check for typos")
                         return
 
                 # enter information into database
-                await db.execute("INSERT INTO SurrenderAt20Subscriptions (Guild, RedPosts, PBE, Rotations, Esports, Releases) \
-                                 VALUES ($1, $2, $3, $4, $5, $6)",
+                await db.execute("INSERT INTO SurrenderAt20Subscriptions (Guild, RedPosts, PBE, Rotations, Esports, Releases, Other) \
+                                 VALUES ($1, $2, $3, $4, $5, $6, $7)",
                                  ctx.guild.id, redposts, pbe, rotations, esports, releases)
 
         # create message embed and send response
@@ -165,29 +165,25 @@ class SurrenderAt20:
             else:
                 categories = categories.lower()
                 # return error if no categories are no found but they are also not None
-                if "red posts" not in categories and "pbe" not in categories and "rotations" not in categories and "esports" not in categories and "releases" not in categories:
+                if "red posts" not in categories and "pbe" not in categories and "rotations" not in categories and "esports" not in categories and "releases" not in categories and "other" not in categories:
                     await ctx.send("No categories found, potentially check for typos")
                     return
 
                 result = results[0]
-                redposts, pbe, rotations, esports, releases = result[1:]
+                redposts, pbe, rotations, esports, releases, other = result[1:7]
                 # looks for each category and update boolean variable for it
-                if "red posts" in categories:
-                    redposts = False
-                if "pbe" in categories:
-                    pbe = False
-                if "rotations" in categories:
-                    rotations = False
-                if "esports" in categories:
-                    esports = False
-                if "releases" in categories:
-                    releases = False
+                redposts = "red posts" not in categories
+                pbe = "pbe" not in categories
+                rotations = "rotations" not in categories
+                esports = "esports" not in categories
+                releases = "releases" not in categories
+                other = "other" not in categories
 
                 # enter information into database
                 await db.execute("UPDATE SurrenderAt20Subscriptions \
-                                  SET RedPosts=$1, PBE=$2, Rotations=$3, Esports=$4, Releases=$5 \
-                                  WHERE Guild=$6",
-                                 redposts, pbe, rotations, esports, releases, ctx.guild.id)
+                                  SET RedPosts=$1, PBE=$2, Rotations=$3, Esports=$4, Releases=$5, Other=$6 \
+                                  WHERE Guild=$7",
+                                 redposts, pbe, rotations, esports, releases, other, ctx.guild.id)
 
         # create message embed and send response
         emb = discord.Embed(title="Successfully unsubscribed from " + categories.title(),
@@ -267,6 +263,8 @@ class SurrenderAt20:
                     categories = categories + "Esports\n"
                 if subscriptions[5]:
                     categories = categories + "Releases\n"
+                if subscriptions[6]:
+                    categories = categories + "Other"
 
                 if categories == "":
                     categories = "-"
@@ -306,9 +304,12 @@ class SurrenderAt20:
         # create message Embed
         emb = discord.Embed(title=item["title"],
                             color=discord.Colour.orange(),
-                            description=" ".join(item["labels"]),
                             url=item["url"],
                             timestamp=datetime.datetime.utcnow())
+        try:
+            emb.description = " ".join(item["labels"])
+        except KeyError:
+            pass
         emb.set_thumbnail(url="https://images-ext-2.discordapp.net/external/p4GLboECWMVLnDH-Orv6nkWm3OG8uLdI2reNRQ9RX74/http/3.bp.blogspot.com/-M_ecJWWc5CE/Uizpk6U3lwI/AAAAAAAACLo/xyh6eQNRzzs/s640/sitethumb.jpg")
         if item["author"]["displayName"] == "Aznbeat":
             author_img = "https://images-ext-2.discordapp.net/external/HI8rRYejC0QYULMmoDBTcZgJ52U0Msvwj9JmUxd-JAI/https/disqus.com/api/users/avatars/Aznbeat.jpg"
