@@ -118,18 +118,38 @@ class Webserver:
                     content = post_obj["content"]
                     channels = await db.fetchrow("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=$1", guild_subscriptions[0])
                     channel = self.bot.get_channel(channels[0])
-                    message = await channel.get_message(guild_subscriptions[10])
+                    try:
+                        message = await channel.get_message(guild_subscriptions[10])
+                    except discord.NotFound:
+                        continue
                     emb = message.embeds[0]
 
                     emb.clear_fields()
 
+                    # get first image in post
+                    startImgPos = content.find('<img', 0, len(content)) + 4
+                    if(startImgPos > -1):
+                        endImgPos = content.find('>', startImgPos, len(content))
+                        imageTag = content[startImgPos:endImgPos]
+                        if "'" in imageTag:
+                            apostrophe = "'"
+                        else:
+                            apostrophe = '"'
+                        startSrcPos = imageTag.find('src=' + apostrophe, 0, len(content)) + 5
+                        endSrcPos = imageTag.find(apostrophe, startSrcPos, len(content))
+                        linkTag = imageTag[startSrcPos:endSrcPos]
+
+                        emb.set_image(url=linkTag)
+
                     brokentext = content.replace("<br />", "\n")
                     cleantext = re.sub(self.cleanr, '', brokentext).replace("&nbsp;", " ")
 
-                    start = cleantext.find("[")
-                    end = cleantext.find("]")
-                    note = cleantext[start:end + 1]
-                    emb.add_field(name=note, value="-")
+                    firstpart = " ".join(cleantext.split("\n")[0:5])
+                    start = firstpart.find("[")
+                    end = firstpart.rfind("]")
+                    note = firstpart[start:end + 1]
+                    if note != "":
+                        emb.add_field(name=note, value="-")
 
                     keywords = await db.fetch("SELECT Keyword FROM Keywords WHERE Guild=$1", guild_subscriptions[0])
                     for keyword in keywords:
@@ -155,9 +175,9 @@ class Webserver:
 
                     await db.execute("UPDATE SurrenderAt20Subscriptions SET LastUpdated=$1, Updates=$2 WHERE Guild=$3",
                                      updated_timestamp, guild_subscriptions[9] + 1, guild_subscriptions[0])
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.5)
 
-                await asyncio.sleep(60 * 60 * (1440 // (10000 // len(subscriptions))))
+                await asyncio.sleep(60 * 2.5)
 
     # handler for post requests to the /youtube route
     async def youtube(self, request):
@@ -181,6 +201,7 @@ class Webserver:
                 ch = await resp.json()
             async with self.bot.pool.acquire() as db:
                 await db.execute("UPDATE YoutubeChannels SET VideoCount=$1 WHERE ID=$2", int(ch["items"][0]["statistics"]["videoCount"]), ch["items"][0]["id"])
+            return
         except KeyError:
             pass
 
