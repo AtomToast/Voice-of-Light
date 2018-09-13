@@ -42,9 +42,11 @@ class Reddit:
 
                         try:
                             submissions_obj = await resp.json()
-                        except Exception:
+                        except Exception as ex:
                             print(await resp.text())
-                            raise Exception
+                            print('Ignoring exception in Reddit.poll()', file=sys.stderr)
+                            traceback.print_exception(type(ex), ex, ex.__traceback__, file=sys.stderr)
+                            pass
 
                     submission_data = submissions_obj["data"]["children"][0]["data"]
 
@@ -71,7 +73,7 @@ class Reddit:
                         else:
                             emb.description = submission_data["selftext"]
 
-                        if submission_data["thumbnail"] not in ["self", "default", "nsfw"]:
+                        if submission_data["thumbnail"] not in ["self", "default", "spoiler", "nsfw"]:
                             emb.set_image(url=submission_data["thumbnail"])
 
                         # send notification to every subscribed server
@@ -87,7 +89,6 @@ class Reddit:
                             except Exception as ex:
                                 print('Ignoring exception in Reddit.poll()', file=sys.stderr)
                                 traceback.print_exception(type(ex), ex, ex.__traceback__, file=sys.stderr)
-                                pass
 
                 await asyncio.sleep(1)
 
