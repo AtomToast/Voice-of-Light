@@ -60,7 +60,8 @@ class SurrenderAt20:
         - PBE
         - Rotations
         - Esports
-        - Releases"""
+        - Releases
+        - Other"""
         async with self.bot.pool.acquire() as db:
             # check if announcement channel is set up
             rows = await db.fetch("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=$1", ctx.guild.id)
@@ -131,7 +132,7 @@ class SurrenderAt20:
                 # enter information into database
                 await db.execute("INSERT INTO SurrenderAt20Subscriptions (Guild, RedPosts, PBE, Rotations, Esports, Releases, Other) \
                                  VALUES ($1, $2, $3, $4, $5, $6, $7)",
-                                 ctx.guild.id, redposts, pbe, rotations, esports, releases)
+                                 ctx.guild.id, redposts, pbe, rotations, esports, other, releases)
 
         # create message embed and send response
         emb = discord.Embed(title="Successfully subscribed to " + categories.title(),
