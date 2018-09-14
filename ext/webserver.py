@@ -438,10 +438,12 @@ class Webserver:
                 brokentext = content.replace("<br />", "\n")
                 cleantext = re.sub(self.cleanr, '', brokentext).replace("&nbsp;", " ")
 
-                start = cleantext.find("[")
-                end = cleantext.find("]")
-                note = cleantext[start:end + 1]
-                emb.add_field(name=note, value="-")
+                firstpart = " ".join(cleantext.split("\n")[0:5])
+                start = firstpart.find("[")
+                end = firstpart.rfind("]")
+                note = firstpart[start:end + 1]
+                if note != "":
+                    emb.add_field(name=note, value="-")
 
                 keywords = await db.fetch("SELECT Keyword FROM Keywords WHERE Guild=$1", guild_subscriptions[0])
                 for keyword in keywords:
