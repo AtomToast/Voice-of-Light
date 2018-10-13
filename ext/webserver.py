@@ -41,6 +41,8 @@ class Webserver:
 
         # create the run task
         self.bot.run_webserver = self.bot.loop.create_task(self.run())
+        self.post_updater = self.bot.loop.create_task(self.update_posts())
+        self.post_updater.add_done_callback(callback)
 
     # run the webserver
     async def run(self):
@@ -87,6 +89,96 @@ class Webserver:
             if resp.status != 200:
                 print(resp.text)
 
+    # update latest ff20 message on post update
+    async def update_posts(self):
+        await self.bot.wait_until_ready()
+
+        async with self.bot.pool.acquire() as db:
+            while not self.bot.is_closed():
+                cached_posts = {}
+                subscriptions = await db.fetch("SELECT * FROM SurrenderAt20Subscriptions")
+                for guild_subscriptions in subscriptions:
+                    if guild_subscriptions[7] is None:
+                        continue
+
+                    try:
+                        post_obj = cached_posts[guild_subscriptions[7]]
+                    except KeyError:
+                        parsingChannelUrl = "https://www.googleapis.com/blogger/v3/blogs/8141971962311514602/posts/" + guild_subscriptions[7]
+                        parsingChannelQueryString = {"key": auth_token.google, "fields": "content,updated"}
+                        async with self.bot.session.get(parsingChannelUrl, params=parsingChannelQueryString) as resp:
+                            post_obj = await resp.json()
+                            cached_posts[guild_subscriptions[7]] = post_obj
+
+                    updated_dt = datetime.datetime.strptime(post_obj["updated"][:18] + "-0700", "%Y-%m-%dT%H:%M:%S%z")
+                    updated_timestamp = int(updated_dt.timestamp())
+                    if updated_timestamp <= guild_subscriptions[8]:
+                        continue
+
+                    content = post_obj["content"]
+                    channels = await db.fetchrow("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=$1", guild_subscriptions[0])
+                    channel = self.bot.get_channel(channels[0])
+                    try:
+                        message = await channel.get_message(guild_subscriptions[10])
+                    except discord.NotFound:
+                        continue
+                    emb = message.embeds[0]
+
+                    emb.clear_fields()
+
+                    # get first image in post
+                    startImgPos = content.find('<img', 0, len(content)) + 4
+                    if(startImgPos > -1):
+                        endImgPos = content.find('>', startImgPos, len(content))
+                        imageTag = content[startImgPos:endImgPos]
+                        if "'" in imageTag:
+                            apostrophe = "'"
+                        else:
+                            apostrophe = '"'
+                        startSrcPos = imageTag.find('src=' + apostrophe, 0, len(content)) + 5
+                        endSrcPos = imageTag.find(apostrophe, startSrcPos, len(content))
+                        linkTag = imageTag[startSrcPos:endSrcPos]
+
+                        emb.set_image(url=linkTag)
+
+                    brokentext = content.replace("<br />", "\n")
+                    cleantext = re.sub(self.cleanr, '', brokentext).replace("&nbsp;", " ")
+
+                    firstpart = " ".join(cleantext.split("\n")[0:5])
+                    start = firstpart.find("[")
+                    end = firstpart.rfind("]")
+                    note = firstpart[start:end + 1]
+                    if note != "":
+                        emb.add_field(name=note, value="-")
+
+                    keywords = await db.fetch("SELECT Keyword FROM Keywords WHERE Guild=$1", guild_subscriptions[0])
+                    for keyword in keywords:
+                        kw = " " + keyword[0] + " "
+                        # check if keyword appears in post
+                        if kw in cleantext.lower():
+                            extracts = []
+                            # find paragraphs with keyword
+                            for part in cleantext.split("\n"):
+                                if kw in part.lower():
+                                    extracts.append(part.strip())
+
+                            # create message embed and send it to the server
+                            exctracts_string = "\n\n".join(extracts)
+                            if len(exctracts_string) > 950:
+                                exctracts_string = exctracts_string[:950] + "... `" + str(cleantext.lower().count(kw)) + "` mentions in total"
+
+                            emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value=exctracts_string, inline=False)
+
+                    emb.set_footer(text="Updates: " + str(guild_subscriptions[9] + 1))
+
+                    await message.edit(embed=emb)
+
+                    await db.execute("UPDATE SurrenderAt20Subscriptions SET LastUpdated=$1, Updates=$2 WHERE Guild=$3",
+                                     updated_timestamp, guild_subscriptions[9] + 1, guild_subscriptions[0])
+                    await asyncio.sleep(0.5)
+
+                await asyncio.sleep(60 * 2.5)
+
     # handler for post requests to the /youtube route
     async def youtube(self, request):
         obj = xmltodict.parse(await request.text())
@@ -109,7 +201,7 @@ class Webserver:
                 ch = await resp.json()
             async with self.bot.pool.acquire() as db:
                 await db.execute("UPDATE YoutubeChannels SET VideoCount=$1 WHERE ID=$2", int(ch["items"][0]["statistics"]["videoCount"]), ch["items"][0]["id"])
-            return web.Response()
+            return
         except KeyError:
             pass
 
@@ -121,7 +213,7 @@ class Webserver:
             v = await resp.json()
         if len(v["items"]) == 0:
             # video not found, probably deleted already
-            return web.Response()
+            return
         video = v["items"][0]["snippet"]
 
         # getting channel data
@@ -132,10 +224,15 @@ class Webserver:
             ch = await resp.json()
         channel_obj = ch["items"][0]
 
+        if isinstance(obj["feed"]["entry"]["link"], list):
+            url = obj["feed"]["entry"]["link"][0]["@href"]
+        else:
+            url = obj["feed"]["entry"]["link"]["@href"]
+
         # creating message embed
         emb = discord.Embed(title=video["title"],
                             description=video["channelTitle"],
-                            url=obj["feed"]["entry"]["link"]["@href"],
+                            url=url,
                             color=discord.Colour.red())
         emb.timestamp = datetime.datetime.utcnow()
         emb.set_image(url=video["thumbnails"]["default"]["url"])
@@ -148,7 +245,7 @@ class Webserver:
         elif video["liveBroadcastContent"] == "live":
             announcement = video["channelTitle"] + " is now live!"
         else:
-            return web.Response()
+            return web
 
         async with self.bot.pool.acquire() as db:
             # if it is a livestream the bot shouldn't announce a livestream more than once in an hour
@@ -161,7 +258,7 @@ class Webserver:
                                      now, obj["feed"]["entry"]["yt:channelId"])
                 else:
                     # stream was restarted
-                    return web.Response()
+                    return
             else:
                 # youtube does not tell if the notification is about a new video
                 # or edits to an old one
@@ -173,7 +270,7 @@ class Webserver:
                                      obj["feed"]["entry"]["yt:videoId"], int(channel_obj["statistics"]["videoCount"]), obj["feed"]["entry"]["yt:channelId"])
                 else:
                     # A video has been edited
-                    return web.Response()
+                    return
 
             # send messages in all subscribed servers
             cursor = await db.fetch("SELECT Guilds.YoutubeNotifChannel, YoutubeSubscriptions.OnlyStreams \
@@ -202,7 +299,7 @@ class Webserver:
         # check if it's a "stream down" notification, it does not contain any content
         if len(obj["data"]) == 0:
             # stream down
-            return web.Response()
+            return
 
         data = obj["data"][0]
 
@@ -250,7 +347,7 @@ class Webserver:
                 await db.execute("UPDATE TwitchChannels SET LastLive=$1 WHERE ID=$2", now, ch["id"])
             else:
                 # stream was restarted
-                return web.Response()
+                return
 
             # sending messages to all subscribed servers
             cursor = await db.fetch("SELECT Guilds.TwitchNotifChannel \
@@ -276,9 +373,12 @@ class Webserver:
 
         emb = discord.Embed(title=item["title"],
                             color=discord.Colour.orange(),
-                            description=" ".join(item["categories"]),
                             url=item["permalinkUrl"],
                             timestamp=datetime.datetime.utcnow())
+        try:
+            emb.description = " ".join(item["categories"])
+        except KeyError:
+            pass
         emb.set_thumbnail(url="https://images-ext-2.discordapp.net/external/p4GLboECWMVLnDH-Orv6nkWm3OG8uLdI2reNRQ9RX74/http/3.bp.blogspot.com/-M_ecJWWc5CE/Uizpk6U3lwI/AAAAAAAACLo/xyh6eQNRzzs/s640/sitethumb.jpg")
         if item["actor"]["id"] == "Aznbeat":
             author_img = "https://images-ext-2.discordapp.net/external/HI8rRYejC0QYULMmoDBTcZgJ52U0Msvwj9JmUxd-JAI/https/disqus.com/api/users/avatars/Aznbeat.jpg"
@@ -295,6 +395,7 @@ class Webserver:
                 post_obj = await resp.json()
             content = post_obj["content"]
 
+        # get first image in post
         startImgPos = content.find('<img', 0, len(content)) + 4
         if(startImgPos > -1):
             endImgPos = content.find('>', startImgPos, len(content))
@@ -314,29 +415,40 @@ class Webserver:
             for guild_subscriptions in subscriptions:
                 for category in item["categories"]:
                     if category == "Red Posts":
-                        if guild_subscriptions[1] == 1:
+                        if guild_subscriptions[1]:
                             break
                     elif category == "PBE":
-                        if guild_subscriptions[2] == 1:
+                        if guild_subscriptions[2]:
                             break
                     elif category == "Rotations":
-                        if guild_subscriptions[3] == 1:
+                        if guild_subscriptions[3]:
                             break
                     elif category == "Esports":
-                        if guild_subscriptions[4] == 1:
+                        if guild_subscriptions[4]:
                             break
                     elif category == "Releases":
-                        if guild_subscriptions[5] == 1:
+                        if guild_subscriptions[5]:
+                            break
+                    else:
+                        if guild_subscriptions[6]:
                             break
                 else:
                     continue
+
+                brokentext = content.replace("<br />", "\n")
+                cleantext = re.sub(self.cleanr, '', brokentext).replace("&nbsp;", " ")
+
+                firstpart = " ".join(cleantext.split("\n")[0:5])
+                start = firstpart.find("[")
+                end = firstpart.rfind("]")
+                note = firstpart[start:end + 1]
+                if note != "":
+                    emb.add_field(name=note, value="-")
 
                 keywords = await db.fetch("SELECT Keyword FROM Keywords WHERE Guild=$1", guild_subscriptions[0])
                 for keyword in keywords:
                     kw = " " + keyword[0] + " "
                     # check if keyword appears in post
-                    brokentext = content.replace("<br />", "\n")
-                    cleantext = re.sub(self.cleanr, '', brokentext).replace("&nbsp;", " ")
                     if kw in cleantext.lower():
                         extracts = []
                         # find paragraphs with keyword
@@ -351,12 +463,23 @@ class Webserver:
 
                         emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value=exctracts_string, inline=False)
 
+                # send post to discord channel
                 channels = await db.fetchrow("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=$1", guild_subscriptions[0])
                 channel = self.bot.get_channel(channels[0])
-                await channel.send("New Surrender@20 post!", embed=emb)
+                msg = await channel.send("New Surrender@20 post!", embed=emb)
                 emb.clear_fields()
 
+                # set information for post updates
+                lastpostid = item["id"][-19:]
+                lastpostmessage = msg.id
+                lastupdated = item["updated"]
+                await db.execute("UPDATE SurrenderAt20Subscriptions \
+                                  SET LastPostID=$1, LastUpdated=$2, Updates=$3, LastPostMessage=$4 \
+                                  WHERE Guild=$5",
+                                 lastpostid, lastupdated, 0, lastpostmessage, guild_subscriptions[0])
+
     # various verification endpoints
+
     # will verify the url as my own to google
     async def googleverification(self, request):
         return web.Response(text="google-site-verification: " + auth_token.google_callback_verification)

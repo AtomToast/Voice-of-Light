@@ -121,6 +121,55 @@ async def kill(ctx):
     await bot.close()
 
 
+# fetch guilds and add guilds, not yet in database
+@commands.is_owner()
+@bot.command(hidden=True)
+async def fetchguilds(ctx):
+    async with bot.pool.acquire() as db:
+        guilds_db = await db.fetch("SELECT ID FROM Guilds")
+        guilds_bot = bot.guilds
+        for g_bot in guilds_bot:
+            for g_db in guilds_db:
+                if g_db[0] == g_bot.id:
+                    break
+            else:
+                await db.execute("INSERT INTO Guilds (ID, Name) VALUES ($1, $2)", g_bot.id, g_bot.name)
+                print(f">> Joined {g_bot.name}")
+
+    await ctx.send("Done fetching guilds!")
+
+
+# send an announcement to all servers the bot is on
+@commands.is_owner()
+@bot.command(hidden=True)
+async def announce(ctx, *, message):
+    async with bot.pool.acquire() as db:
+        guilds_db = await db.fetch("SELECT * FROM Guilds")
+        for g in guilds_db:
+            if g[2] is not None:
+                channel = bot.get_channel(g[2])
+                await channel.send("```" + message + "```")
+            elif g[3] is not None:
+                channel = bot.get_channel(g[3])
+                await channel.send("```" + message + "```")
+            elif g[4] is not None:
+                channel = bot.get_channel(g[4])
+                await channel.send("```" + message + "```")
+            elif g[5] is not None:
+                channel = bot.get_channel(g[5])
+                await channel.send("```" + message + "```")
+            else:
+                guild = bot.get_guild(g[0])
+                for ch in guild.text_channels:
+                    bot_member = guild.get_member(bot.user.id)
+                    permissions = ch.permissions_for(bot_member)
+                    if permissions.send_messages:
+                        await channel.send("```" + message + "```")
+                        break
+
+    await ctx.send("Announcement sent!")
+
+
 if __name__ == "__main__":
     bot.pool = bot.loop.run_until_complete(asyncpg.create_pool(database="voiceoflightdb", loop=bot.loop, command_timeout=60))
     for ext in extensions:

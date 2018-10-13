@@ -45,9 +45,11 @@ class Reddit:
 
                         try:
                             submissions_obj = await resp.json()
-                        except Exception:
+                        except Exception as ex:
                             print(await resp.text())
-                            raise Exception
+                            print('Ignoring exception in Reddit.poll()', file=sys.stderr)
+                            traceback.print_exception(type(ex), ex, ex.__traceback__, file=sys.stderr)
+                            pass
 
                     submission_data = submissions_obj["data"]["children"][0]["data"]
 
@@ -58,7 +60,11 @@ class Reddit:
                                          submission_data["id"], submission_data["created_utc"], row[0])
 
                         # create message embed
-                        emb = discord.Embed(title=submission_data["title"],
+                        if len(submission_data["title"]) > 256:
+                            title = submission_data["title"][:256]
+                        else:
+                            title = submission_data["title"]
+                        emb = discord.Embed(title=title,
                                             color=discord.Colour.dark_blue(),
                                             url="https://www.reddit.com" + submission_data["permalink"])
                         emb.timestamp = datetime.datetime.utcnow()
@@ -70,7 +76,7 @@ class Reddit:
                         else:
                             emb.description = submission_data["selftext"]
 
-                        if submission_data["thumbnail"] not in ["self", "default", "nsfw"]:
+                        if submission_data["thumbnail"] not in ["self", "default", "spoiler", "nsfw"]:
                             emb.set_image(url=submission_data["thumbnail"])
 
                         # send notification to every subscribed server
@@ -86,7 +92,6 @@ class Reddit:
                             except Exception as ex:
                                 print('Ignoring exception in Reddit.poll()', file=sys.stderr)
                                 traceback.print_exception(type(ex), ex, ex.__traceback__, file=sys.stderr)
-                                pass
 
                 await asyncio.sleep(1)
 
@@ -114,8 +119,8 @@ class Reddit:
             await ctx.send("Missing channel parameter")
             return
 
-        bot_id = ctx.guild.get_member(self.bot.user.id)
-        permissions = channel_obj.permissions_for(bot_id)
+        bot_member = ctx.guild.get_member(self.bot.user.id)
+        permissions = channel_obj.permissions_for(bot_member)
         if not permissions.send_messages or not permissions.embed_links:
             await ctx.send("Command failed, please make sure that the bot has both permissions for sending messages and using embeds in the specified channel!")
             return
