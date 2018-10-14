@@ -108,6 +108,8 @@ class Webserver:
                         parsingChannelQueryString = {"key": auth_token.google, "fields": "content,updated"}
                         async with self.bot.session.get(parsingChannelUrl, params=parsingChannelQueryString) as resp:
                             post_obj = await resp.json()
+                            if resp.status == 500:
+                                break
                             cached_posts[guild_subscriptions[7]] = post_obj
 
                     updated_dt = datetime.datetime.strptime(post_obj["updated"][:18] + "-0700", "%Y-%m-%dT%H:%M:%S%z")
@@ -142,7 +144,7 @@ class Webserver:
                         emb.set_image(url=linkTag)
 
                     brokentext = content.replace("<br />", "\n")
-                    cleantext = re.sub(self.cleanr, '', brokentext).replace("&nbsp;", " ")
+                    cleantext = re.sub(self.cleanr, '', brokentext).replace("&nbsp;", " ").replace("amp;", "")
 
                     firstpart = " ".join(cleantext.split("\n")[0:5])
                     start = firstpart.find("[")
@@ -170,9 +172,7 @@ class Webserver:
                             emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value=exctracts_string, inline=False)
 
                     emb.set_footer(text="Updates: " + str(guild_subscriptions[9] + 1))
-
                     await message.edit(embed=emb)
-
                     await db.execute("UPDATE SurrenderAt20Subscriptions SET LastUpdated=$1, Updates=$2 WHERE Guild=$3",
                                      updated_timestamp, guild_subscriptions[9] + 1, guild_subscriptions[0])
                     await asyncio.sleep(0.5)
@@ -235,7 +235,7 @@ class Webserver:
                             url=url,
                             color=discord.Colour.red())
         emb.timestamp = datetime.datetime.utcnow()
-        emb.set_image(url=video["thumbnails"]["default"]["url"])
+        emb.set_image(url=video["thumbnails"]["high"]["url"])
         emb.set_footer(icon_url=channel_obj["snippet"]["thumbnails"]["default"]["url"], text="Youtube")
 
         # check if it's a video or a livestream
@@ -284,6 +284,8 @@ class Webserver:
                 if row[1] == 1 and video["liveBroadcastContent"] == "none":
                     continue
                 announceChannel = self.bot.get_channel(row[0])
+                if announceChannel is None:
+                    print(video["title"], video["channelTitle"], row)
                 await announceChannel.send(announcement, embed=emb)
 
     # handler for post requests to the /twitch route
@@ -413,27 +415,30 @@ class Webserver:
         async with self.bot.pool.acquire() as db:
             subscriptions = await db.fetch("SELECT * FROM SurrenderAt20Subscriptions")
             for guild_subscriptions in subscriptions:
-                for category in item["categories"]:
-                    if category == "Red Posts":
-                        if guild_subscriptions[1]:
-                            break
-                    elif category == "PBE":
-                        if guild_subscriptions[2]:
-                            break
-                    elif category == "Rotations":
-                        if guild_subscriptions[3]:
-                            break
-                    elif category == "Esports":
-                        if guild_subscriptions[4]:
-                            break
-                    elif category == "Releases":
-                        if guild_subscriptions[5]:
-                            break
+                try:
+                    for category in item["categories"]:
+                        if category == "Red Posts":
+                            if guild_subscriptions[1]:
+                                break
+                        elif category == "PBE":
+                            if guild_subscriptions[2]:
+                                break
+                        elif category == "Rotations":
+                            if guild_subscriptions[3]:
+                                break
+                        elif category == "Esports":
+                            if guild_subscriptions[4]:
+                                break
+                        elif category == "Releases":
+                            if guild_subscriptions[5]:
+                                break
+                        else:
+                            if guild_subscriptions[6]:
+                                break
                     else:
-                        if guild_subscriptions[6]:
-                            break
-                else:
-                    continue
+                        continue
+                except KeyError:
+                    pass
 
                 brokentext = content.replace("<br />", "\n")
                 cleantext = re.sub(self.cleanr, '', brokentext).replace("&nbsp;", " ")
@@ -466,6 +471,9 @@ class Webserver:
                 # send post to discord channel
                 channels = await db.fetchrow("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=$1", guild_subscriptions[0])
                 channel = self.bot.get_channel(channels[0])
+                if channel is None:
+                    await db.execute("UPDATE SurrenderAt20Subscriptions SET Other=$1 WHERE Guild=$2", False, guild_subscriptions[0])
+                    continue
                 msg = await channel.send("New Surrender@20 post!", embed=emb)
                 emb.clear_fields()
 
