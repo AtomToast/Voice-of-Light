@@ -46,12 +46,12 @@ class Reddit:
                             print(await resp.text())
                             print('Ignoring exception in Reddit.poll()', file=sys.stderr)
                             traceback.print_exception(type(ex), ex, ex.__traceback__, file=sys.stderr)
-                            pass
 
                     submission_data = submissions_obj["data"]["children"][0]["data"]
 
                     # new post found
                     if submission_data["id"] != row[2] and submission_data["created_utc"] > row[3]:
+
                         # update last post data in database
                         await db.execute("UPDATE Subreddits SET LastPostID=$1, LastPostTime=$2 WHERE ID=$3",
                                          submission_data["id"], submission_data["created_utc"], row[0])
@@ -69,12 +69,20 @@ class Reddit:
 
                         # if post content is very big, trim it
                         if len(submission_data["selftext"]) > 1900:
-                            emb.description = submission_data["selftext"][:1900] + "... `click title to continue`"
+                            emb.description = submission_data["selftext"][:1900].replace("amp;", "") + "... `click title to continue`"
                         else:
-                            emb.description = submission_data["selftext"]
+                            emb.description = submission_data["selftext"].replace("amp;", "")
 
-                        if submission_data["thumbnail"] not in ["self", "default", "spoiler", "nsfw"]:
-                            emb.set_image(url=submission_data["thumbnail"])
+                        try:
+                            emb.set_image(url=submission_data["preview"]["images"][0]["variants"]["gif"]["source"]["url"])
+                        except KeyError:
+                            if submission_data["thumbnail"] not in ["self", "default", "spoiler", "nsfw"]:
+                                if submission_data["over_18"]:
+                                    emb.set_image(url=submission_data["preview"]["images"][0]["source"]["url"])
+                                else:
+                                    emb.set_image(url=submission_data["thumbnail"])
+                            elif submission_data["over_18"] and submission_data["domain"] in ["i.imgur.com", "imgur.com", "i.redd.it", "gfycat.com"]:
+                                emb.set_image(url=submission_data["url"])
 
                         # send notification to every subscribed server
                         channels = await db.fetch("SELECT Guilds.RedditNotifChannel \
@@ -84,6 +92,12 @@ class Reddit:
 
                         for ch in channels:
                             announceChannel = self.bot.get_channel(ch[0])
+                            if submission_data["over_18"] and not announceChannel.is_nsfw():
+                                try:
+                                    emb.set_image(url=submission_data["preview"]["images"][0]["variants"]["nsfw"]["source"]["url"].replace("amp;", ""))
+                                except KeyError:
+                                    emb.set_image(url="https://www.digitaltrends.com/wp-content/uploads/2012/11/reddit.jpeg")
+                                emb.set_footer(text="This is an NSFW post, to uncensor posts, please mark the notification channel as NSFW")
                             try:
                                 await announceChannel.send("A new post in /r/" + row[1] + " !", embed=emb)
                             except Exception as ex:
@@ -148,7 +162,7 @@ class Reddit:
         sr = subreddit.replace("/r/", "").replace("r/", "")
 
         # search for specified subreddit
-        parsingChannelUrl = f"https://www.reddit.com/subreddits/search.json?q={sr}"
+        parsingChannelUrl = f"https://www.reddit.com/subreddits/search.json?q={sr}&include_over_18=on"
         parsingChannelHeader = {'cache-control': "no-cache"}
         parsingChannelQueryString = {"limit": "1"}
         async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader,
@@ -164,6 +178,11 @@ class Reddit:
         if subreddit_data["display_name"].lower() != sr.lower():
             name = subreddit_data["display_name"]
             await ctx.send(f"Could not find subreddit called '{sr}'. \nDo you maybe mean '{name}'?")
+            return
+
+        announceChannel = self.bot.get_channel(rows[0][0])
+        if subreddit_data["over18"] and not announceChannel.is_nsfw():
+            await ctx.send("This subreddit is NSFW, to subscribe you need to set the announcement channel to NSFW")
             return
 
         # get last post data
@@ -214,7 +233,7 @@ class Reddit:
         sr = subreddit.replace("/r/", "").replace("r/", "")
 
         # search subreddit
-        parsingChannelUrl = f"https://www.reddit.com/subreddits/search.json?q={sr}"
+        parsingChannelUrl = f"https://www.reddit.com/subreddits/search.json?q={sr}&include_over_18=on"
         parsingChannelHeader = {'cache-control': "no-cache"}
         parsingChannelQueryString = {"limit": "1"}
         async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader,
@@ -259,7 +278,7 @@ class Reddit:
                 await db.execute("DELETE FROM Subreddits WHERE ID=$1", submission_data["subreddit_id"])
 
         # create message embed and send it
-        emb = discord.Embed(title="Successfully unsubscribed to " + submission_data["subreddit_name_prefixed"],
+        emb = discord.Embed(title="Successfully unsubscribed from " + submission_data["subreddit_name_prefixed"],
                             description=subreddit_data["public_description"], color=discord.Colour.dark_red())
         emb.set_thumbnail(url=subreddit_data["icon_img"])
         emb.url = "https://www.reddit.com" + subreddit_data["url"]
