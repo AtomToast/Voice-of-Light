@@ -126,7 +126,7 @@ async def kill(ctx):
 @bot.command(hidden=True)
 async def fetchguilds(ctx):
     async with bot.pool.acquire() as db:
-        guilds_db = await db.fetch("SELECT ID FROM Guilds")
+        guilds_db = await db.fetch("SELECT ID, Name FROM Guilds")
         guilds_bot = bot.guilds
         for g_bot in guilds_bot:
             for g_db in guilds_db:
@@ -135,6 +135,17 @@ async def fetchguilds(ctx):
             else:
                 await db.execute("INSERT INTO Guilds (ID, Name) VALUES ($1, $2)", g_bot.id, g_bot.name)
                 print(f">> Joined {g_bot.name}")
+
+        for g_db in guilds_db:
+            guild_obj = bot.get_guild(g_db[0])
+            if guild_obj is None:
+                await db.execute("DELETE FROM Guilds WHERE ID=$1", g_db[0])
+                await db.execute("DELETE FROM YoutubeSubscriptions WHERE Guild=$1", g_db[0])
+                await db.execute("DELETE FROM TwitchSubscriptions WHERE Guild=$1", g_db[0])
+                await db.execute("DELETE FROM SubredditSubscriptions WHERE Guild=$1", g_db[0])
+                await db.execute("DELETE FROM Keywords WHERE Guild=$1", g_db[0])
+                await db.execute("DELETE FROM SurrenderAt20Subscriptions WHERE Guild=$1", g_db[0])
+                print(f"<< Left {g_db[1]}")
 
     await ctx.send("Done fetching guilds!")
 
@@ -168,6 +179,13 @@ async def announce(ctx, *, message):
                         break
 
     await ctx.send("Announcement sent!")
+
+
+# love
+@bot.command(hidden=True, aliases=["-;"])
+async def luv(ctx):
+    emote = bot.get_emoji(423224786664161280)
+    await ctx.message.add_reaction(emote)
 
 
 if __name__ == "__main__":
