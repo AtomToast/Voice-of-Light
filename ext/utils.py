@@ -53,6 +53,7 @@ class Utils:
         emb.description = "Maintaining and updating the bot takes alot of time. So any help and support, as smol as it might be, is greatly appreciated!"
         emb.add_field(name="Support via PayPal", value="https://www.paypal.me/atomtoast", inline=False)
         emb.add_field(name="Contribute to Voice of Light on GitHub", value="https://github.com/AtomToast/Voice-of-Light")
+        await ctx.send(embed=emb)
 
 
 def setup(bot):
