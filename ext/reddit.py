@@ -88,7 +88,7 @@ class Reddit:
                                 emb.set_image(url=submission_data["url"])
 
                         # send notification to every subscribed server
-                        channels = await db.fetch("SELECT Guilds.RedditNotifChannel \
+                        channels = await db.fetch("SELECT Guilds.RedditNotifChannel, Guilds.ID \
                                                      FROM SubredditSubscriptions INNER JOIN Guilds \
                                                      ON SubredditSubscriptions.Guild=Guilds.ID \
                                                      WHERE Subreddit=$1", row[0])
@@ -103,9 +103,10 @@ class Reddit:
                                 emb.set_footer(text="This is an NSFW post, to uncensor posts, please mark the notification channel as NSFW")
                             try:
                                 await announceChannel.send("A new post in /r/" + row[1] + " !", embed=emb)
-                            except Exception as ex:
-                                print('Ignoring exception in Reddit.poll()', file=sys.stderr)
-                                traceback.print_exception(type(ex), ex, ex.__traceback__, file=sys.stderr)
+                            except AttributeError:
+                                guild = self.bot.get_guild(ch[1])
+                                if guild is None:
+                                    await db.execute("DELETE FROM SubredditSubscriptions WHERE Subreddit=$1 AND Guild=$2", ch[0], ch[1])
 
                 await asyncio.sleep(1)
 

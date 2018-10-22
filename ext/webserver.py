@@ -273,7 +273,7 @@ class Webserver:
                     return
 
             # send messages in all subscribed servers
-            cursor = await db.fetch("SELECT Guilds.YoutubeNotifChannel, YoutubeSubscriptions.OnlyStreams \
+            cursor = await db.fetch("SELECT Guilds.YoutubeNotifChannel, YoutubeSubscriptions.OnlyStreams, Guilds.ID \
                                        FROM YoutubeSubscriptions INNER JOIN Guilds \
                                        ON YoutubeSubscriptions.Guild=Guilds.ID \
                                        WHERE YoutubeChannel=$1", obj["feed"]["entry"]["yt:channelId"])
@@ -285,7 +285,10 @@ class Webserver:
                     continue
                 announceChannel = self.bot.get_channel(row[0])
                 if announceChannel is None:
-                    print(video["title"], video["channelTitle"], row)
+                    guild = self.bot.get_guild(ch[1])
+                    if guild is None:
+                        await db.execute("DELETE FROM YoutubeSubscriptions WHERE YoutubeChannel=$1 AND Guild=$2", obj["feed"]["entry"]["yt:channelId"], row[2])
+                    continue
                 await announceChannel.send(announcement, embed=emb)
 
     # handler for post requests to the /twitch route
