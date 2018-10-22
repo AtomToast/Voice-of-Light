@@ -46,6 +46,14 @@ class Utils:
         """Get the link for adding the bot to your own server"""
         await ctx.send("https://discordapp.com/api/oauth2/authorize?client_id=460410391290314752&scope=bot&permissions=19456")
 
+    @commands.command(aliases=["about"])
+    async def support(self, ctx):
+        """How to support the bot and the dev"""
+        emb = discord.Embed(title="Support/About", color=discord.Colour.dark_blue())
+        emb.description = "Maintaining and updating the bot takes alot of time. So any help and support, as smol as it might be, is greatly appreciated!"
+        emb.add_field(name="Support via PayPal", value="https://www.paypal.me/atomtoast", inline=False)
+        emb.add_field(name="Contribute to Voice of Light on GitHub", value="https://github.com/AtomToast/Voice-of-Light")
+
 
 def setup(bot):
     bot.add_cog(Utils(bot))
