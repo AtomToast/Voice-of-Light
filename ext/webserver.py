@@ -172,7 +172,10 @@ class Webserver:
                             emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value=exctracts_string, inline=False)
 
                     emb.set_footer(text="Updates: " + str(guild_subscriptions[9] + 1))
-                    await message.edit(embed=emb)
+                    try:
+                        await message.edit(embed=emb)
+                    except Exception:
+                        pass
                     await db.execute("UPDATE SurrenderAt20Subscriptions SET LastUpdated=$1, Updates=$2 WHERE Guild=$3",
                                      updated_timestamp, guild_subscriptions[9] + 1, guild_subscriptions[0])
                     await asyncio.sleep(0.5)
@@ -477,7 +480,10 @@ class Webserver:
                 if channel is None:
                     await db.execute("UPDATE SurrenderAt20Subscriptions SET Other=$1 WHERE Guild=$2", False, guild_subscriptions[0])
                     continue
-                msg = await channel.send("New Surrender@20 post!", embed=emb)
+                try:
+                    msg = await channel.send("New Surrender@20 post!", embed=emb)
+                except discord.errors.Forbidden:
+                    pass
                 emb.clear_fields()
 
                 # set information for post updates
