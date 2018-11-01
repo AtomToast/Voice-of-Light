@@ -120,10 +120,10 @@ class Webserver:
                     content = post_obj["content"]
                     channels = await db.fetchrow("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=$1", guild_subscriptions[0])
                     channel = self.bot.get_channel(channels[0])
-                    try:
-                        message = await channel.get_message(guild_subscriptions[10])
-                    except discord.NotFound:
+                    if channel is None:
                         continue
+
+                    message = await channel.get_message(guild_subscriptions[10])
                     emb = message.embeds[0]
 
                     emb.clear_fields()
@@ -288,7 +288,7 @@ class Webserver:
                     continue
                 announceChannel = self.bot.get_channel(row[0])
                 if announceChannel is None:
-                    guild = self.bot.get_guild(ch[1])
+                    guild = self.bot.get_guild(row[2])
                     if guild is None:
                         await db.execute("DELETE FROM YoutubeSubscriptions WHERE YoutubeChannel=$1 AND Guild=$2", obj["feed"]["entry"]["yt:channelId"], row[2])
                     continue
