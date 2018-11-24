@@ -123,7 +123,10 @@ class Webserver:
                     if channel is None:
                         continue
 
-                    message = await channel.get_message(guild_subscriptions[10])
+                    try:
+                        message = await channel.get_message(guild_subscriptions[10])
+                    except Exception:   # frick you
+                        continue
                     emb = message.embeds[0]
 
                     emb.clear_fields()
