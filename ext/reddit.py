@@ -50,7 +50,11 @@ class Reddit:
                             print('Ignoring exception in Reddit.poll()', file=sys.stderr)
                             traceback.print_exception(type(ex), ex, ex.__traceback__, file=sys.stderr)
 
-                    submission_data = submissions_obj["data"]["children"][0]["data"]
+                    try:
+                        submission_data = submissions_obj["data"]["children"][0]["data"]
+                    except Exception:
+                        await asyncio.sleep(1)
+                        continue
 
                     # new post found
                     if submission_data["id"] != row[2] and submission_data["created_utc"] > row[3]:
