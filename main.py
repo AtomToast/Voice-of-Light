@@ -185,8 +185,10 @@ async def announce(ctx, *, message):
 @bot.command(hidden=True, aliases=["-;"])
 async def luv(ctx):
     emote = bot.get_emoji(423224786664161280)
-    await ctx.message.add_reaction(emote)
-
+    try:
+        await ctx.message.add_reaction(emote)
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     bot.pool = bot.loop.run_until_complete(asyncpg.create_pool(database="voiceoflightdb", loop=bot.loop, command_timeout=60))
