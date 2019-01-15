@@ -49,6 +49,8 @@ class Reddit:
                             print(await resp.text())
                             print('Ignoring exception in Reddit.poll()', file=sys.stderr)
                             traceback.print_exception(type(ex), ex, ex.__traceback__, file=sys.stderr)
+                            await asyncio.sleep(1)
+                            continue
 
                     try:
                         submission_data = submissions_obj["data"]["children"][0]["data"]
@@ -81,9 +83,9 @@ class Reddit:
                             emb.description = submission_data["selftext"].replace("amp;", "")
 
                         try:
+                            emb.set_image(url=submission_data["preview"]["images"][0]["variants"]["gif"]["source"]["url"])
+                        except KeyError:
                             try:
-                                emb.set_image(url=submission_data["preview"]["images"][0]["variants"]["gif"]["source"]["url"])
-                            except KeyError:
                                 if submission_data["thumbnail"] not in ["self", "default", "spoiler", "nsfw"]:
                                     if submission_data["over_18"]:
                                         emb.set_image(url=submission_data["preview"]["images"][0]["source"]["url"])
@@ -91,8 +93,8 @@ class Reddit:
                                         emb.set_image(url=submission_data["thumbnail"])
                                 elif submission_data["over_18"] and submission_data["domain"] in ["i.imgur.com", "imgur.com", "i.redd.it", "gfycat.com"]:
                                     emb.set_image(url=submission_data["url"])
-                        except KeyError:
-                            pass
+                            except KeyError:
+                                pass
 
                         # send notification to every subscribed server
                         channels = await db.fetch("SELECT Guilds.RedditNotifChannel, Guilds.ID \
@@ -114,6 +116,8 @@ class Reddit:
                                 guild = self.bot.get_guild(ch[1])
                                 if guild is None:
                                     await db.execute("DELETE FROM SubredditSubscriptions WHERE Subreddit=$1 AND Guild=$2", ch[0], ch[1])
+                            except discord.errors.Forbidden:
+                                pass
 
                 await asyncio.sleep(1)
 

@@ -486,8 +486,9 @@ class Webserver:
                 try:
                     msg = await channel.send("New Surrender@20 post!", embed=emb)
                 except discord.errors.Forbidden:
-                    pass
-                emb.clear_fields()
+                    continue
+                finally:
+                    emb.clear_fields()
 
                 # set information for post updates
                 lastpostid = item["id"][-19:]
