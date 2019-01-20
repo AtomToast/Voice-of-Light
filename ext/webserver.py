@@ -333,7 +333,7 @@ class Webserver:
         # if no game is specified a default will be chosen
         if len(game_obj["data"]) == 0:
             game_url = ""
-            game_name = "a game"
+            game_name = "a stream"
         else:
             ga = game_obj["data"][0]
             game_url = ga["box_art_url"].format(width=300, height=300)
