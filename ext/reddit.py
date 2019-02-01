@@ -76,11 +76,12 @@ class Reddit:
                         emb.timestamp = datetime.datetime.utcnow()
                         emb.set_author(name=submission_data["author"])
 
+                        post_content = submission_data["selftext"].replace("amp;", "").replace("&#x200B;", "").replace("&lt;", "<").replace("&gt;", ">")
                         # if post content is very big, trim it
                         if len(submission_data["selftext"]) > 1900:
-                            emb.description = submission_data["selftext"][:1900].replace("amp;", "") + "... `click title to continue`"
+                            emb.description = post_content[:1900] + "... `click title to continue`"
                         else:
-                            emb.description = submission_data["selftext"].replace("amp;", "")
+                            emb.description = post_content
 
                         try:
                             emb.set_image(url=submission_data["preview"]["images"][0]["variants"]["gif"]["source"]["url"])
