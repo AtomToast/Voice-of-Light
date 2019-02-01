@@ -237,11 +237,11 @@ class Webserver:
 
         # creating message embed
         emb = discord.Embed(title=video["title"],
-                            description=video["channelTitle"],
                             url=url,
                             color=discord.Colour.red())
         emb.timestamp = datetime.datetime.utcnow()
         emb.set_image(url=video["thumbnails"]["high"]["url"])
+        emb.set_author(name=video["channelTitle"])
         emb.set_footer(icon_url=channel_obj["snippet"]["thumbnails"]["default"]["url"], text="Youtube")
 
         # check if it's a video or a livestream
