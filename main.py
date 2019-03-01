@@ -25,8 +25,7 @@ description = "A bot that posts videos and streams.\n\nFor feedback and suggesti
 extensions = ["ext.youtube", "ext.twitch", "ext.reddit", "ext.utils", "ext.webserver", "ext.surrenderat20"]
 
 bot = commands.Bot(command_prefix=commands.when_mentioned_or(';'), description=description, activity=discord.Game(";help"))
-
-bot.session = aiohttp.ClientSession(loop=bot.loop)
+bot.session = None
 
 
 @bot.event
@@ -35,6 +34,7 @@ async def on_ready():
     print(bot.user.name)
     print(bot.user.id)
     print('------')
+    bot.session = aiohttp.ClientSession(loop=bot.loop)
 
 
 # add new guilds to database
