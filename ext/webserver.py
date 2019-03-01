@@ -112,7 +112,10 @@ class Webserver:
                                 break
                             cached_posts[guild_subscriptions[7]] = post_obj
 
-                    updated_dt = datetime.datetime.strptime(post_obj["updated"][:18] + "-0700", "%Y-%m-%dT%H:%M:%S%z")
+                    try:
+                        updated_dt = datetime.datetime.strptime(post_obj["updated"][:18] + "-0700", "%Y-%m-%dT%H:%M:%S%z")
+                    except KeyError:
+                        continue
                     updated_timestamp = int(updated_dt.timestamp())
                     if updated_timestamp <= guild_subscriptions[8]:
                         continue
