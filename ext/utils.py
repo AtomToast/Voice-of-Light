@@ -1,11 +1,16 @@
 import discord
 from discord.ext import commands
 
+from datetime import datetime
+import asyncio
+
 
 class Utils:
     """Utility commands"""
     def __init__(self, bot):
         self.bot = bot
+
+        self.svan_sleep_reminder = self.bot.loop.create_task(self.sleep_reminder())
 
     # who and where the commands are permitted to use
     @commands.has_permissions(manage_messages=True)
@@ -54,6 +59,20 @@ class Utils:
         emb.add_field(name="Support via PayPal", value="https://www.paypal.me/atomtoast", inline=False)
         emb.add_field(name="Contribute to Voice of Light on GitHub", value="https://github.com/AtomToast/Voice-of-Light")
         await ctx.send(embed=emb)
+
+    async def sleep_reminder(self):
+        await self.bot.wait_until_ready()
+        while not self.bot.is_closed():
+            guild = self.bot.get_guild(213881169844895744)  # get sol mains
+            svan = guild.get_member(146498809772507136)  # get svan
+            tyochi = guild.get_member(291641665033207809)  # get Tyochi
+            time = datetime.now().time()
+            if time.hour < 6 and svan.status != discord.Status.offline:
+                await svan.send("It's past midnight. You should be sleeping!")
+                await tyochi.send("Tyo, stop being a weeb and go the fuck to sleep")
+            if time.hour > 23 and svan.status != discord.Status.offline:
+                await svan.send("Are you aware of the time? It's almost bed o'clock!")
+            await asyncio.sleep(15 * 60)
 
 
 def setup(bot):
