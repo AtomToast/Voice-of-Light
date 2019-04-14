@@ -6,7 +6,7 @@ import datetime
 import re
 
 
-class Youtube:
+class Youtube(commands.Cog):
     """Add or remove youtube channels to announce streams and videos of"""
     def __init__(self, bot):
         self.bot = bot

@@ -8,7 +8,7 @@ import traceback
 import sys
 
 
-class Reddit:
+class Reddit(commands.Cog):
     """Add or remove subreddits to announce new posts of"""
     def __init__(self, bot):
         self.bot = bot

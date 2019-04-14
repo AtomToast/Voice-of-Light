@@ -6,7 +6,7 @@ import datetime
 import re
 
 
-class SurrenderAt20:
+class SurrenderAt20(commands.Cog):
     """Add or remove keywords to annouce from surrender@20 posts"""
     def __init__(self, bot):
         self.bot = bot

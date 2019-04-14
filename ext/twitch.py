@@ -5,7 +5,7 @@ import auth_token
 import datetime
 
 
-class Twitch:
+class Twitch(commands.Cog):
     """Add or remove twitch channels to announce streams of"""
     def __init__(self, bot):
         self.bot = bot

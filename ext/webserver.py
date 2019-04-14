@@ -1,4 +1,5 @@
 import discord
+from discord.ext import commands
 
 from aiohttp import web
 import asyncio
@@ -17,7 +18,7 @@ def callback(result):
         traceback.print_exception(type(ex), ex, ex.__traceback__, file=sys.stderr)
 
 
-class Webserver:
+class Webserver(commands.Cog):
     """A webserver for handling notifications"""
     def __init__(self, bot):
         self.bot = bot

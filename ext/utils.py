@@ -5,7 +5,7 @@ from datetime import datetime
 import asyncio
 
 
-class Utils:
+class Utils(commands.Cog):
     """Utility commands"""
     def __init__(self, bot):
         self.bot = bot
