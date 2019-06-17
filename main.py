@@ -1,3 +1,5 @@
+#!/home/kjell/envs/vol-env/bin/python
+
 import discord
 from discord.ext import commands
 
@@ -12,7 +14,7 @@ import aiohttp
 
 # set up logging
 logger = logging.getLogger('discord')
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 handler = logging.FileHandler(
     filename='discord.log', encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter(
