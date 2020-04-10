@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 import datetime
 import asyncio
@@ -10,117 +10,123 @@ import sys
 
 class Reddit(commands.Cog):
     """Add or remove subreddits to announce new posts of"""
+
     def __init__(self, bot):
         self.bot = bot
 
-        # create polling background task
-        self.reddit_poller = self.bot.loop.create_task(self.poll())
-        self.reddit_poller.add_done_callback(self.callback)
+        self.poll.start()
 
-    def callback(self, result):
-        ex = result.exception()
-        print('Ignoring exception in Reddit.poll()', file=sys.stderr)
-        traceback.print_exception(type(ex), ex, ex.__traceback__, file=sys.stderr)
+    def cog_unload(self):
+        self.poll.cancel()
 
-        if ex == asyncio.CancelledError:
-            self.reddit_poller = self.bot.loop.create_task(self.poll())
-            self.reddit_poller.add_done_callback(self.callback)
-
+    @tasks.loop(seconds=2.0)
     async def poll(self):
-        await self.bot.wait_until_ready()
-
         async with self.bot.pool.acquire() as db:
-            while not self.bot.is_closed():
-                # loop through all subreddits and check if a new post is up
-                subreddits = await db.fetch("SELECT * FROM Subreddits")
-                for row in subreddits:
-                    parsingChannelUrl = f"https://www.reddit.com/r/{row[1]}/new.json"
-                    parsingChannelHeader = {'cache-control': "no-cache", "User-Agent": auth_token.user_agent}
-                    parsingChannelQueryString = {"sort": "new", "limit": "1"}
-                    async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader,
-                                                    params=parsingChannelQueryString) as resp:
-                        if resp.status > 400:
-                            await asyncio.sleep(2)
-                            continue
-
-                        try:
-                            submissions_obj = await resp.json()
-                        except Exception as ex:
-                            print(await resp.text())
-                            print('Ignoring exception in Reddit.poll()', file=sys.stderr)
-                            traceback.print_exception(type(ex), ex, ex.__traceback__, file=sys.stderr)
-                            await asyncio.sleep(1)
-                            continue
+            # loop through all subreddits and check if a new post is up
+            subreddits = await db.fetch("SELECT * FROM Subreddits")
+            for row in subreddits:
+                parsingChannelUrl = f"https://www.reddit.com/r/{row[1]}/new.json"
+                parsingChannelHeader = {
+                    'cache-control': "no-cache", "User-Agent": auth_token.user_agent}
+                parsingChannelQueryString = {"sort": "new", "limit": "1"}
+                async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader,
+                                                params=parsingChannelQueryString) as resp:
+                    if resp.status > 400:
+                        await asyncio.sleep(2)
+                        continue
 
                     try:
-                        submission_data = submissions_obj["data"]["children"][0]["data"]
-                    except Exception:
+                        submissions_obj = await resp.json()
+                    except Exception as ex:
+                        print(await resp.text())
+                        print('Ignoring exception in Reddit.poll()',
+                              file=sys.stderr)
+                        traceback.print_exception(
+                            type(ex), ex, ex.__traceback__, file=sys.stderr)
                         await asyncio.sleep(1)
                         continue
 
-                    # new post found
-                    if submission_data["id"] != row[2] and submission_data["created_utc"] > row[3]:
+                try:
+                    submission_data = submissions_obj["data"]["children"][0]["data"]
+                except Exception:
+                    await asyncio.sleep(1)
+                    continue
 
-                        # update last post data in database
-                        await db.execute("UPDATE Subreddits SET LastPostID=$1, LastPostTime=$2 WHERE ID=$3",
-                                         submission_data["id"], submission_data["created_utc"], row[0])
+                # new post found
+                if submission_data["id"] != row[2] and submission_data["created_utc"] > row[3]:
 
-                        # create message embed
-                        if len(submission_data["title"]) > 256:
-                            title = submission_data["title"][:256]
-                        else:
-                            title = submission_data["title"]
-                        emb = discord.Embed(title=title,
-                                            color=discord.Colour.dark_blue(),
-                                            url="https://www.reddit.com" + submission_data["permalink"])
-                        emb.timestamp = datetime.datetime.utcnow()
-                        emb.set_author(name=submission_data["author"])
+                    # update last post data in database
+                    await db.execute("UPDATE Subreddits SET LastPostID=$1, LastPostTime=$2 WHERE ID=$3",
+                                     submission_data["id"], submission_data["created_utc"], row[0])
 
-                        post_content = submission_data["selftext"].replace("amp;", "").replace("&#x200B;", "").replace("&lt;", "<").replace("&gt;", ">")
-                        # if post content is very big, trim it
-                        if len(submission_data["selftext"]) > 1900:
-                            emb.description = post_content[:1900] + "... `click title to continue`"
-                        else:
-                            emb.description = post_content
+                    # create message embed
+                    if len(submission_data["title"]) > 256:
+                        title = submission_data["title"][:256]
+                    else:
+                        title = submission_data["title"]
+                    emb = discord.Embed(title=title,
+                                        color=discord.Colour.dark_blue(),
+                                        url="https://www.reddit.com" + submission_data["permalink"])
+                    emb.timestamp = datetime.datetime.utcnow()
+                    emb.set_author(name=submission_data["author"])
 
+                    post_content = submission_data["selftext"].replace("amp;", "").replace(
+                        "&#x200B;", "").replace("&lt;", "<").replace("&gt;", ">")
+                    # if post content is very big, trim it
+                    if len(submission_data["selftext"]) > 1900:
+                        emb.description = post_content[:1900] + \
+                            "... `click title to continue`"
+                    else:
+                        emb.description = post_content
+
+                    try:
+                        emb.set_image(
+                            url=submission_data["preview"]["images"][0]["variants"]["gif"]["source"]["url"])
+                    except KeyError:
                         try:
-                            emb.set_image(url=submission_data["preview"]["images"][0]["variants"]["gif"]["source"]["url"])
+                            if submission_data["thumbnail"] not in ["self", "default", "spoiler", "nsfw"]:
+                                if submission_data["over_18"]:
+                                    emb.set_image(
+                                        url=submission_data["preview"]["images"][0]["source"]["url"])
+                                else:
+                                    emb.set_image(
+                                        url=submission_data["thumbnail"])
+                            elif submission_data["over_18"] and submission_data["domain"] in ["i.imgur.com", "imgur.com", "i.redd.it", "gfycat.com"]:
+                                emb.set_image(url=submission_data["url"])
                         except KeyError:
+                            pass
+
+                    # send notification to every subscribed server
+                    channels = await db.fetch("SELECT Guilds.RedditNotifChannel, Guilds.ID \
+                                                 FROM SubredditSubscriptions INNER JOIN Guilds \
+                                                 ON SubredditSubscriptions.Guild=Guilds.ID \
+                                                 WHERE Subreddit=$1", row[0])
+
+                    for ch in channels:
+                        announceChannel = self.bot.get_channel(ch[0])
+                        if announceChannel is None:
+                            continue
+                        if submission_data["over_18"] and not announceChannel.is_nsfw():
                             try:
-                                if submission_data["thumbnail"] not in ["self", "default", "spoiler", "nsfw"]:
-                                    if submission_data["over_18"]:
-                                        emb.set_image(url=submission_data["preview"]["images"][0]["source"]["url"])
-                                    else:
-                                        emb.set_image(url=submission_data["thumbnail"])
-                                elif submission_data["over_18"] and submission_data["domain"] in ["i.imgur.com", "imgur.com", "i.redd.it", "gfycat.com"]:
-                                    emb.set_image(url=submission_data["url"])
+                                emb.set_image(
+                                    url=submission_data["preview"]["images"][0]["variants"]["nsfw"]["source"]["url"].replace("amp;", ""))
                             except KeyError:
-                                pass
+                                emb.set_image(
+                                    url="https://www.digitaltrends.com/wp-content/uploads/2012/11/reddit.jpeg")
+                            emb.set_footer(
+                                text="This is an NSFW post, to uncensor posts, please mark the notification channel as NSFW")
+                        try:
+                            await announceChannel.send("A new post in /r/" + row[1] + " !", embed=emb)
+                        except AttributeError:
+                            guild = self.bot.get_guild(ch[1])
+                            if guild is None:
+                                await db.execute("DELETE FROM SubredditSubscriptions WHERE Subreddit=$1 AND Guild=$2", ch[0], ch[1])
+                        except discord.errors.Forbidden:
+                            pass
 
-                        # send notification to every subscribed server
-                        channels = await db.fetch("SELECT Guilds.RedditNotifChannel, Guilds.ID \
-                                                     FROM SubredditSubscriptions INNER JOIN Guilds \
-                                                     ON SubredditSubscriptions.Guild=Guilds.ID \
-                                                     WHERE Subreddit=$1", row[0])
-
-                        for ch in channels:
-                            announceChannel = self.bot.get_channel(ch[0])
-                            if submission_data["over_18"] and not announceChannel.is_nsfw():
-                                try:
-                                    emb.set_image(url=submission_data["preview"]["images"][0]["variants"]["nsfw"]["source"]["url"].replace("amp;", ""))
-                                except KeyError:
-                                    emb.set_image(url="https://www.digitaltrends.com/wp-content/uploads/2012/11/reddit.jpeg")
-                                emb.set_footer(text="This is an NSFW post, to uncensor posts, please mark the notification channel as NSFW")
-                            try:
-                                await announceChannel.send("A new post in /r/" + row[1] + " !", embed=emb)
-                            except AttributeError:
-                                guild = self.bot.get_guild(ch[1])
-                                if guild is None:
-                                    await db.execute("DELETE FROM SubredditSubscriptions WHERE Subreddit=$1 AND Guild=$2", ch[0], ch[1])
-                            except discord.errors.Forbidden:
-                                pass
-
-                await asyncio.sleep(1)
+    @poll.before_loop
+    async def before_printer(self):
+        await self.bot.wait_until_ready()
 
     # who and where the commands are permitted to use
     @commands.has_permissions(manage_messages=True)
@@ -138,7 +144,8 @@ class Reddit(commands.Cog):
         if len(ctx.message.channel_mentions) > 0:
             channel_obj = ctx.message.channel_mentions[0]
         elif channel is not None:
-            channel_obj = discord.utils.get(ctx.guild.channels, name=channel.replace("#", ""))
+            channel_obj = discord.utils.get(
+                ctx.guild.channels, name=channel.replace("#", ""))
             if channel_obj is None:
                 await ctx.send(f"No channel named {channel}")
                 return
@@ -316,7 +323,8 @@ class Reddit(commands.Cog):
                 names = names + row[0] + "\n"
 
         # create message embed and send it
-        emb = discord.Embed(title="Subreddit subscriptions", color=discord.Colour.dark_blue(), description=names)
+        emb = discord.Embed(title="Subreddit subscriptions",
+                            color=discord.Colour.dark_blue(), description=names)
         await ctx.send(embed=emb)
 
 
