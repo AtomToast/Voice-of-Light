@@ -7,10 +7,12 @@ import asyncio
 
 class Utils(commands.Cog):
     """Utility commands"""
+
     def __init__(self, bot):
         self.bot = bot
 
-        self.svan_sleep_reminder = self.bot.loop.create_task(self.sleep_reminder())
+        self.svan_sleep_reminder = self.bot.loop.create_task(
+            self.sleep_reminder())
 
     # who and where the commands are permitted to use
     @commands.has_permissions(manage_messages=True)
@@ -25,7 +27,8 @@ class Utils(commands.Cog):
         if len(ctx.message.channel_mentions) > 0:
             channel_obj = ctx.message.channel_mentions[0]
         elif channel is not None:
-            channel_obj = discord.utils.get(ctx.guild.channels, name=channel.replace("#", ""))
+            channel_obj = discord.utils.get(
+                ctx.guild.channels, name=channel.replace("#", ""))
             if channel_obj is None:
                 await ctx.send(f"No channel named {channel}")
                 return
@@ -54,10 +57,13 @@ class Utils(commands.Cog):
     @commands.command(aliases=["about"])
     async def support(self, ctx):
         """How to support the bot and the dev"""
-        emb = discord.Embed(title="Support/About", color=discord.Colour.dark_blue())
+        emb = discord.Embed(title="Support/About",
+                            color=discord.Colour.dark_blue())
         emb.description = "Maintaining and updating the bot takes alot of time. So any help and support, as smol as it might be, is greatly appreciated!"
-        emb.add_field(name="Support via PayPal", value="https://www.paypal.me/atomtoast", inline=False)
-        emb.add_field(name="Contribute to Voice of Light on GitHub", value="https://github.com/AtomToast/Voice-of-Light")
+        emb.add_field(name="Support via PayPal",
+                      value="https://www.paypal.me/atomtoast", inline=False)
+        emb.add_field(name="Contribute to Voice of Light on GitHub",
+                      value="https://github.com/AtomToast/Voice-of-Light")
         await ctx.send(embed=emb)
 
     async def sleep_reminder(self):
@@ -69,7 +75,7 @@ class Utils(commands.Cog):
             time = datetime.now().time()
             if time.hour < 6 and svan.status != discord.Status.offline:
                 await svan.send("It's past midnight. You should be sleeping!")
-                await tyochi.send("Tyo, stop being a weeb and go the fuck to sleep")
+                # await tyochi.send("Tyo, stop being a weeb and go the fuck to sleep")
             if time.hour > 23 and svan.status != discord.Status.offline:
                 await svan.send("Are you aware of the time? It's almost bed o'clock!")
             await asyncio.sleep(15 * 60)

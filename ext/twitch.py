@@ -7,6 +7,7 @@ import datetime
 
 class Twitch(commands.Cog):
     """Add or remove twitch channels to announce streams of"""
+
     def __init__(self, bot):
         self.bot = bot
 
@@ -26,7 +27,8 @@ class Twitch(commands.Cog):
         if len(ctx.message.channel_mentions) > 0:
             channel_obj = ctx.message.channel_mentions[0]
         elif channel is not None:
-            channel_obj = discord.utils.get(ctx.guild.channels, name=channel.replace("#", ""))
+            channel_obj = discord.utils.get(
+                ctx.guild.channels, name=channel.replace("#", ""))
             if channel_obj is None:
                 await ctx.send(f"No channel named {channel}")
                 return
@@ -83,7 +85,8 @@ class Twitch(commands.Cog):
             # otherwise add it
             results = await db.fetch("SELECT 1 FROM TwitchChannels WHERE ID=$1", channel_id)
             if len(results) == 0:
-                dt = datetime.datetime(2018, 9, 12, 13, 33, 7, 593639, tzinfo=datetime.timezone.utc)
+                dt = datetime.datetime(
+                    2018, 9, 12, 13, 33, 7, 593639, tzinfo=datetime.timezone.utc)
                 await db.execute("INSERT INTO TwitchChannels (ID, Name, LastLive) VALUES ($1, $2, $3)",
                                  channel_id, channel_name, dt)
 
@@ -114,7 +117,7 @@ class Twitch(commands.Cog):
 
     @twitch.command(aliases=["unsub"])
     async def unsubscribe(self, ctx, *, channel=None):
-        """Unsubscripes from a channel
+        """Unsubscribes from a channel
 
         Its livestreams will no longer be announced"""
         if channel is None:
@@ -181,7 +184,8 @@ class Twitch(commands.Cog):
             for row in cursor:
                 names = names + row[0] + "\n"
 
-        emb = discord.Embed(title="Twitch subscriptions", color=discord.Colour.purple(), description=names)
+        emb = discord.Embed(title="Twitch subscriptions",
+                            color=discord.Colour.purple(), description=names)
         await ctx.send(embed=emb)
 
 
