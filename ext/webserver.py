@@ -70,7 +70,7 @@ class Webserver(commands.Cog):
             for row in cursor:
                 ID = row[0]
                 parsingChannelUrl = "https://api.twitch.tv/helix/webhooks/hub"
-                parsingChannelHeader = {'Client-ID': auth_token.twitch}
+                parsingChannelHeader = {'Client-ID': auth_token.twitch_id}
                 parsingChannelQueryString = {"hub.mode": "subscribe", "hub.callback": auth_token.server_url + "/twitch",
                                              "hub.topic": "https://api.twitch.tv/helix/streams?user_id=" + ID, "hub.lease_seconds": 864000}
                 async with self.bot.session.post(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
@@ -337,7 +337,7 @@ class Webserver(commands.Cog):
 
         # getting channel data
         parsingChannelUrl = "https://api.twitch.tv/helix/users"
-        parsingChannelHeader = {'Client-ID': auth_token.twitch}
+        parsingChannelHeader = {'Client-ID': auth_token.twitch_id}
         parsingChannelQueryString = {"id": data["user_id"]}
         async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
             channel_obj = await resp.json()
@@ -345,7 +345,7 @@ class Webserver(commands.Cog):
 
         # getting game data
         parsingChannelUrl = "https://api.twitch.tv/helix/games"
-        parsingChannelHeader = {'Client-ID': auth_token.twitch}
+        parsingChannelHeader = {'Client-ID': auth_token.twitch_id}
         parsingChannelQueryString = {"id": data["game_id"]}
         async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
             game_obj = await resp.json()

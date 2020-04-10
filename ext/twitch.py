@@ -67,7 +67,7 @@ class Twitch(commands.Cog):
 
         # trying to get channel data
         parsingChannelUrl = "https://api.twitch.tv/helix/users"
-        parsingChannelHeader = {'Client-ID': auth_token.twitch}
+        parsingChannelHeader = {'Client-ID': auth_token.twitch_id}
         parsingChannelQueryString = {"login": channel}
         async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
             channel_obj = await resp.json()
@@ -100,7 +100,7 @@ class Twitch(commands.Cog):
 
         # send twitch subscription request
         parsingChannelUrl = "https://api.twitch.tv/helix/webhooks/hub"
-        parsingChannelHeader = {'Client-ID': auth_token.twitch}
+        parsingChannelHeader = {'Client-ID': auth_token.twitch_id}
         parsingChannelQueryString = {"hub.mode": "subscribe", "hub.callback": auth_token.server_url + "/twitch",
                                      "hub.topic": "https://api.twitch.tv/helix/streams?user_id=" + channel_id, "hub.lease_seconds": 864000}
         async with self.bot.session.post(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
@@ -126,7 +126,7 @@ class Twitch(commands.Cog):
 
         # try to get channel data
         parsingChannelUrl = "https://api.twitch.tv/helix/users"
-        parsingChannelHeader = {'Client-ID': auth_token.twitch}
+        parsingChannelHeader = {'Client-ID': auth_token.twitch_id}
         parsingChannelQueryString = {"login": channel}
         async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
             channel_obj = await resp.json()
@@ -156,7 +156,7 @@ class Twitch(commands.Cog):
 
         # send unsubscribe request
         parsingChannelUrl = "https://api.twitch.tv/helix/webhooks/hub"
-        parsingChannelHeader = {'Client-ID': auth_token.twitch}
+        parsingChannelHeader = {'Client-ID': auth_token.twitch_id}
         parsingChannelQueryString = {"hub.mode": "unsubscribe", "hub.callback": auth_token.server_url + "/twitch",
                                      "hub.topic": "https://api.twitch.tv/helix/streams?user_id=" + channel_id}
         async with self.bot.session.post(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
