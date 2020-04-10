@@ -8,6 +8,7 @@ import re
 
 class SurrenderAt20(commands.Cog):
     """Add or remove keywords to annouce from surrender@20 posts"""
+
     def __init__(self, bot):
         self.bot = bot
         self.cleanr = re.compile('<.*?>')
@@ -28,7 +29,8 @@ class SurrenderAt20(commands.Cog):
         if len(ctx.message.channel_mentions) > 0:
             channel_obj = ctx.message.channel_mentions[0]
         elif channel is not None:
-            channel_obj = discord.utils.get(ctx.guild.channels, name=channel.replace("#", ""))
+            channel_obj = discord.utils.get(
+                ctx.guild.channels, name=channel.replace("#", ""))
             if channel_obj is None:
                 await ctx.send(f"No channel named {channel}")
                 return
@@ -137,7 +139,8 @@ class SurrenderAt20(commands.Cog):
         # create message embed and send response
         emb = discord.Embed(title="Successfully subscribed to " + categories.title(),
                             color=discord.Colour.green())
-        emb.set_thumbnail(url="https://images-ext-2.discordapp.net/external/p4GLboECWMVLnDH-Orv6nkWm3OG8uLdI2reNRQ9RX74/http/3.bp.blogspot.com/-M_ecJWWc5CE/Uizpk6U3lwI/AAAAAAAACLo/xyh6eQNRzzs/s640/sitethumb.jpg")
+        emb.set_thumbnail(
+            url="https://images-ext-2.discordapp.net/external/p4GLboECWMVLnDH-Orv6nkWm3OG8uLdI2reNRQ9RX74/http/3.bp.blogspot.com/-M_ecJWWc5CE/Uizpk6U3lwI/AAAAAAAACLo/xyh6eQNRzzs/s640/sitethumb.jpg")
 
         await ctx.send(embed=emb)
 
@@ -189,7 +192,8 @@ class SurrenderAt20(commands.Cog):
         # create message embed and send response
         emb = discord.Embed(title="Successfully unsubscribed from " + categories.title(),
                             color=discord.Colour.red())
-        emb.set_thumbnail(url="https://images-ext-2.discordapp.net/external/p4GLboECWMVLnDH-Orv6nkWm3OG8uLdI2reNRQ9RX74/http/3.bp.blogspot.com/-M_ecJWWc5CE/Uizpk6U3lwI/AAAAAAAACLo/xyh6eQNRzzs/s640/sitethumb.jpg")
+        emb.set_thumbnail(
+            url="https://images-ext-2.discordapp.net/external/p4GLboECWMVLnDH-Orv6nkWm3OG8uLdI2reNRQ9RX74/http/3.bp.blogspot.com/-M_ecJWWc5CE/Uizpk6U3lwI/AAAAAAAACLo/xyh6eQNRzzs/s640/sitethumb.jpg")
 
         await ctx.send(embed=emb)
 
@@ -280,7 +284,8 @@ class SurrenderAt20(commands.Cog):
                 keywords = "-"
 
         # create message embed and send it
-        emb = discord.Embed(title="Surrender@20 subscriptions", color=discord.Colour.orange())
+        emb = discord.Embed(title="Surrender@20 subscriptions",
+                            color=discord.Colour.orange())
         emb.add_field(name="Categories", value=categories)
         emb.add_field(name="Keywords", value=keywords)
         await ctx.send(embed=emb)
@@ -296,7 +301,8 @@ class SurrenderAt20(commands.Cog):
                 return
 
         parsingChannelUrl = "https://www.googleapis.com/blogger/v3/blogs/8141971962311514602/posts"
-        parsingChannelQueryString = {"key": auth_token.google, "fields": "items"}
+        parsingChannelQueryString = {
+            "key": auth_token.google, "fields": "items"}
         async with self.bot.session.get(parsingChannelUrl, params=parsingChannelQueryString) as resp:
             posts = await resp.json()
         item = posts["items"][0]
@@ -311,7 +317,8 @@ class SurrenderAt20(commands.Cog):
             emb.description = " ".join(item["labels"])
         except KeyError:
             pass
-        emb.set_thumbnail(url="https://images-ext-2.discordapp.net/external/p4GLboECWMVLnDH-Orv6nkWm3OG8uLdI2reNRQ9RX74/http/3.bp.blogspot.com/-M_ecJWWc5CE/Uizpk6U3lwI/AAAAAAAACLo/xyh6eQNRzzs/s640/sitethumb.jpg")
+        emb.set_thumbnail(
+            url="https://images-ext-2.discordapp.net/external/p4GLboECWMVLnDH-Orv6nkWm3OG8uLdI2reNRQ9RX74/http/3.bp.blogspot.com/-M_ecJWWc5CE/Uizpk6U3lwI/AAAAAAAACLo/xyh6eQNRzzs/s640/sitethumb.jpg")
         if item["author"]["displayName"] == "Aznbeat":
             author_img = "https://images-ext-2.discordapp.net/external/HI8rRYejC0QYULMmoDBTcZgJ52U0Msvwj9JmUxd-JAI/https/disqus.com/api/users/avatars/Aznbeat.jpg"
         else:
@@ -335,7 +342,8 @@ class SurrenderAt20(commands.Cog):
                 kw = " " + keyword[0] + " "
                 # check if keyword appears in post
                 brokentext = content.replace("<br />", "\n")
-                cleantext = re.sub(self.cleanr, '', brokentext).replace("&nbsp;", " ")
+                cleantext = re.sub(
+                    self.cleanr, '', brokentext).replace("&nbsp;", " ")
                 if kw in cleantext.lower():
                     extracts = []
                     # find paragraphs with keyword
@@ -346,9 +354,11 @@ class SurrenderAt20(commands.Cog):
                     # create message embed and send it to the server
                     exctrats_string = "\n\n".join(extracts)
                     if len(exctrats_string) > 950:
-                        exctrats_string = exctrats_string[:950] + "... `" + str(cleantext.lower().count(kw)) + "` mentions in total"
+                        exctrats_string = exctrats_string[:950] + "... `" + str(
+                            cleantext.lower().count(kw)) + "` mentions in total"
 
-                    emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value=exctrats_string, inline=False)
+                    emb.add_field(
+                        name=f"'{keyword[0]}' was mentioned in this post!", value=exctrats_string, inline=False)
 
             # send post
             channels = await db.fetchrow("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=$1", ctx.guild.id)

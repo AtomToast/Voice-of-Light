@@ -24,9 +24,11 @@ logger.addHandler(handler)
 
 # setting up bot instance
 description = "A bot that posts videos and streams.\n\nFor feedback and suggestions contact AtomToast#9642"
-extensions = ["ext.youtube", "ext.twitch", "ext.reddit", "ext.utils", "ext.webserver", "ext.surrenderat20"]
+extensions = ["ext.youtube", "ext.twitch", "ext.reddit",
+              "ext.utils", "ext.webserver", "ext.surrenderat20"]
 
-bot = commands.Bot(command_prefix=commands.when_mentioned_or(';'), description=description, activity=discord.Game(";help"))
+bot = commands.Bot(command_prefix=commands.when_mentioned_or(
+    ';'), description=description, activity=discord.Game(";help"))
 bot.session = None
 
 
@@ -100,8 +102,10 @@ async def on_command_error(ctx, error):
         except Exception:
             pass
 
-    print('Ignoring exception in command {}:'.format(ctx.command), file=sys.stderr)
-    traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
+    print('Ignoring exception in command {}:'.format(
+        ctx.command), file=sys.stderr)
+    traceback.print_exception(
+        type(error), error, error.__traceback__, file=sys.stderr)
 
 
 # bot shutdown
@@ -193,7 +197,8 @@ async def luv(ctx):
         pass
 
 if __name__ == "__main__":
-    bot.pool = bot.loop.run_until_complete(asyncpg.create_pool(database="voiceoflightdb", loop=bot.loop, command_timeout=60))
+    bot.pool = bot.loop.run_until_complete(asyncpg.create_pool(
+        database="voiceoflightdb", loop=bot.loop, command_timeout=60))
     for ext in extensions:
         bot.load_extension(ext)
     bot.run(auth_token.discord)

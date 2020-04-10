@@ -8,6 +8,7 @@ import re
 
 class Youtube(commands.Cog):
     """Add or remove youtube channels to announce streams and videos of"""
+
     def __init__(self, bot):
         self.bot = bot
 
@@ -27,7 +28,8 @@ class Youtube(commands.Cog):
         if len(ctx.message.channel_mentions) > 0:
             channel_obj = ctx.message.channel_mentions[0]
         elif channel is not None:
-            channel_obj = discord.utils.get(ctx.guild.channels, name=channel.replace("#", ""))
+            channel_obj = discord.utils.get(
+                ctx.guild.channels, name=channel.replace("#", ""))
             if channel_obj is None:
                 await ctx.send(f"No channel named {channel}")
                 return
@@ -110,7 +112,8 @@ class Youtube(commands.Cog):
             # check if youtube channel is already in database, otherwise add it
             results = await db.fetch("SELECT 1 FROM YoutubeChannels WHERE ID=$1", channel_id)
             if len(results) == 0:
-                dt = datetime.datetime(2018, 9, 12, 13, 33, 7, 593639, tzinfo=datetime.timezone.utc)
+                dt = datetime.datetime(
+                    2018, 9, 12, 13, 33, 7, 593639, tzinfo=datetime.timezone.utc)
                 await db.execute("INSERT INTO YoutubeChannels (ID, Name, LastLive, LastVideoID, VideoCount) VALUES ($1, $2, $3, $4, $5)",
                                  channel_id, channel_name, dt, videoID, videoCount)
 
@@ -211,7 +214,8 @@ class Youtube(commands.Cog):
                     os = ""
                 names = names + row[0] + os + "\n"
 
-        emb = discord.Embed(title="Youtube subscriptions", color=discord.Colour.red(), description=names)
+        emb = discord.Embed(title="Youtube subscriptions",
+                            color=discord.Colour.red(), description=names)
         await ctx.send(embed=emb)
 
 

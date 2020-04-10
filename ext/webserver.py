@@ -15,29 +15,35 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 def callback(result):
     ex = result.exception()
     if ex is not None:
-        traceback.print_exception(type(ex), ex, ex.__traceback__, file=sys.stderr)
+        traceback.print_exception(
+            type(ex), ex, ex.__traceback__, file=sys.stderr)
 
 
 class Webserver(commands.Cog):
     """A webserver for handling notifications"""
+
     def __init__(self, bot):
         self.bot = bot
         self.cleanr = re.compile('<.*?>')
 
         # create the application and add routes
         self.app = web.Application()
-        self.app.add_routes([web.get("/" + auth_token.google_callback_verification, self.googleverification)])
+        self.app.add_routes(
+            [web.get("/" + auth_token.google_callback_verification, self.googleverification)])
         self.app.add_routes([web.post("/youtube", self.youtube)])
         self.app.add_routes([web.get("/youtube", self.youtubeverification)])
         self.app.add_routes([web.post("/twitch", self.twitch)])
         self.app.add_routes([web.get("/twitch", self.twitchverification)])
         self.app.add_routes([web.post("/surrenderat20", self.surrenderat20)])
-        self.app.add_routes([web.get("/surrenderat20", self.surrenderat20verification)])
+        self.app.add_routes(
+            [web.get("/surrenderat20", self.surrenderat20verification)])
 
         # push notification run out after a specified time so I need to refresh them regularly
         self.scheduler = AsyncIOScheduler(event_loop=self.bot.loop)
-        self.scheduler.add_job(self.refresh_subscriptions, "interval", days=3, id="refresher", replace_existing=True, next_run_time=datetime.datetime.utcnow())
-        self.scheduler.add_job(self.ping_feedburner, "interval", minutes=3, id="pinger", replace_existing=True)
+        self.scheduler.add_job(self.refresh_subscriptions, "interval", days=3, id="refresher",
+                               replace_existing=True, next_run_time=datetime.datetime.utcnow())
+        self.scheduler.add_job(
+            self.ping_feedburner, "interval", minutes=3, id="pinger", replace_existing=True)
         self.scheduler.start()
 
         # create the run task
@@ -105,8 +111,10 @@ class Webserver(commands.Cog):
                     try:
                         post_obj = cached_posts[guild_subscriptions[7]]
                     except KeyError:
-                        parsingChannelUrl = "https://www.googleapis.com/blogger/v3/blogs/8141971962311514602/posts/" + guild_subscriptions[7]
-                        parsingChannelQueryString = {"key": auth_token.google, "fields": "content,updated"}
+                        parsingChannelUrl = "https://www.googleapis.com/blogger/v3/blogs/8141971962311514602/posts/" + \
+                            guild_subscriptions[7]
+                        parsingChannelQueryString = {
+                            "key": auth_token.google, "fields": "content,updated"}
                         async with self.bot.session.get(parsingChannelUrl, params=parsingChannelQueryString) as resp:
                             post_obj = await resp.json()
                             if resp.status == 500:
@@ -114,7 +122,8 @@ class Webserver(commands.Cog):
                             cached_posts[guild_subscriptions[7]] = post_obj
 
                     try:
-                        updated_dt = datetime.datetime.strptime(post_obj["updated"][:18] + "-0700", "%Y-%m-%dT%H:%M:%S%z")
+                        updated_dt = datetime.datetime.strptime(
+                            post_obj["updated"][:18] + "-0700", "%Y-%m-%dT%H:%M:%S%z")
                     except KeyError:
                         continue
                     updated_timestamp = int(updated_dt.timestamp())
@@ -138,20 +147,24 @@ class Webserver(commands.Cog):
                     # get first image in post
                     startImgPos = content.find('<img', 0, len(content)) + 4
                     if(startImgPos > -1):
-                        endImgPos = content.find('>', startImgPos, len(content))
+                        endImgPos = content.find(
+                            '>', startImgPos, len(content))
                         imageTag = content[startImgPos:endImgPos]
                         if "'" in imageTag:
                             apostrophe = "'"
                         else:
                             apostrophe = '"'
-                        startSrcPos = imageTag.find('src=' + apostrophe, 0, len(content)) + 5
-                        endSrcPos = imageTag.find(apostrophe, startSrcPos, len(content))
+                        startSrcPos = imageTag.find(
+                            'src=' + apostrophe, 0, len(content)) + 5
+                        endSrcPos = imageTag.find(
+                            apostrophe, startSrcPos, len(content))
                         linkTag = imageTag[startSrcPos:endSrcPos]
 
                         emb.set_image(url=linkTag)
 
                     brokentext = content.replace("<br />", "\n")
-                    cleantext = re.sub(self.cleanr, '', brokentext).replace("&nbsp;", " ").replace("amp;", "")
+                    cleantext = re.sub(self.cleanr, '', brokentext).replace(
+                        "&nbsp;", " ").replace("amp;", "")
 
                     firstpart = " ".join(cleantext.split("\n")[0:5])
                     start = firstpart.find("[")
@@ -174,11 +187,14 @@ class Webserver(commands.Cog):
                             # create message embed and send it to the server
                             exctracts_string = "\n\n".join(extracts)
                             if len(exctracts_string) > 950:
-                                exctracts_string = exctracts_string[:950] + "... `" + str(cleantext.lower().count(kw)) + "` mentions in total"
+                                exctracts_string = exctracts_string[:950] + "... `" + str(
+                                    cleantext.lower().count(kw)) + "` mentions in total"
 
-                            emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value=exctracts_string, inline=False)
+                            emb.add_field(
+                                name=f"'{keyword[0]}' was mentioned in this post!", value=exctracts_string, inline=False)
 
-                    emb.set_footer(text="Updates: " + str(guild_subscriptions[9] + 1))
+                    emb.set_footer(text="Updates: " +
+                                   str(guild_subscriptions[9] + 1))
                     try:
                         await message.edit(embed=emb)
                     except Exception:
@@ -246,7 +262,8 @@ class Webserver(commands.Cog):
         emb.timestamp = datetime.datetime.utcnow()
         emb.set_image(url=video["thumbnails"]["high"]["url"])
         emb.set_author(name=video["channelTitle"])
-        emb.set_footer(icon_url=channel_obj["snippet"]["thumbnails"]["default"]["url"], text="Youtube")
+        emb.set_footer(
+            icon_url=channel_obj["snippet"]["thumbnails"]["default"]["url"], text="Youtube")
 
         # check if it's a video or a livestream
         # if it is neither it is a livestream announcement which will be ignored
@@ -394,7 +411,8 @@ class Webserver(commands.Cog):
             emb.description = " ".join(item["categories"])
         except KeyError:
             pass
-        emb.set_thumbnail(url="https://images-ext-2.discordapp.net/external/p4GLboECWMVLnDH-Orv6nkWm3OG8uLdI2reNRQ9RX74/http/3.bp.blogspot.com/-M_ecJWWc5CE/Uizpk6U3lwI/AAAAAAAACLo/xyh6eQNRzzs/s640/sitethumb.jpg")
+        emb.set_thumbnail(
+            url="https://images-ext-2.discordapp.net/external/p4GLboECWMVLnDH-Orv6nkWm3OG8uLdI2reNRQ9RX74/http/3.bp.blogspot.com/-M_ecJWWc5CE/Uizpk6U3lwI/AAAAAAAACLo/xyh6eQNRzzs/s640/sitethumb.jpg")
         if item["actor"]["id"] == "Aznbeat":
             author_img = "https://images-ext-2.discordapp.net/external/HI8rRYejC0QYULMmoDBTcZgJ52U0Msvwj9JmUxd-JAI/https/disqus.com/api/users/avatars/Aznbeat.jpg"
         else:
@@ -404,8 +422,10 @@ class Webserver(commands.Cog):
         try:
             content = item["content"]
         except KeyError:
-            parsingChannelUrl = "https://www.googleapis.com/blogger/v3/blogs/8141971962311514602/posts/" + item["id"][-19:]
-            parsingChannelQueryString = {"key": auth_token.google, "fields": "content"}
+            parsingChannelUrl = "https://www.googleapis.com/blogger/v3/blogs/8141971962311514602/posts/" + \
+                item["id"][-19:]
+            parsingChannelQueryString = {
+                "key": auth_token.google, "fields": "content"}
             async with self.bot.session.get(parsingChannelUrl, params=parsingChannelQueryString) as resp:
                 post_obj = await resp.json()
             content = post_obj["content"]
@@ -419,7 +439,8 @@ class Webserver(commands.Cog):
                 apostrophe = "'"
             else:
                 apostrophe = '"'
-            startSrcPos = imageTag.find('src=' + apostrophe, 0, len(content)) + 5
+            startSrcPos = imageTag.find(
+                'src=' + apostrophe, 0, len(content)) + 5
             endSrcPos = imageTag.find(apostrophe, startSrcPos, len(content))
             linkTag = imageTag[startSrcPos:endSrcPos]
 
@@ -454,7 +475,8 @@ class Webserver(commands.Cog):
                     pass
 
                 brokentext = content.replace("<br />", "\n")
-                cleantext = re.sub(self.cleanr, '', brokentext).replace("&nbsp;", " ")
+                cleantext = re.sub(
+                    self.cleanr, '', brokentext).replace("&nbsp;", " ")
 
                 firstpart = " ".join(cleantext.split("\n")[0:5])
                 start = firstpart.find("[")
@@ -477,9 +499,11 @@ class Webserver(commands.Cog):
                         # create message embed and send it to the server
                         exctracts_string = "\n\n".join(extracts)
                         if len(exctracts_string) > 950:
-                            exctracts_string = exctracts_string[:950] + "... `" + str(cleantext.lower().count(kw)) + "` mentions in total"
+                            exctracts_string = exctracts_string[:950] + "... `" + str(
+                                cleantext.lower().count(kw)) + "` mentions in total"
 
-                        emb.add_field(name=f"'{keyword[0]}' was mentioned in this post!", value=exctracts_string, inline=False)
+                        emb.add_field(
+                            name=f"'{keyword[0]}' was mentioned in this post!", value=exctracts_string, inline=False)
 
                 # send post to discord channel
                 channels = await db.fetchrow("SELECT SurrenderAt20NotifChannel FROM Guilds WHERE ID=$1", guild_subscriptions[0])
