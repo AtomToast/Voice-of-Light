@@ -41,7 +41,7 @@ class Webserver(commands.Cog):
         # push notification run out after a specified time so I need to refresh them regularly
         self.scheduler = AsyncIOScheduler(event_loop=self.bot.loop)
         self.scheduler.add_job(self.refresh_subscriptions, "interval", days=3, id="refresher",
-                               replace_existing=True, next_run_time=datetime.datetime.utcnow())
+                               replace_existing=True, next_run_time=datetime.datetime.utcnow() + datetime.timedelta(seconds=+10, hours=+2))
         self.scheduler.add_job(
             self.ping_feedburner, "interval", minutes=3, id="pinger", replace_existing=True)
         self.scheduler.start()
@@ -70,7 +70,8 @@ class Webserver(commands.Cog):
             for row in cursor:
                 ID = row[0]
                 parsingChannelUrl = "https://api.twitch.tv/helix/webhooks/hub"
-                parsingChannelHeader = {'Client-ID': auth_token.twitch_id}
+                parsingChannelHeader = {'Client-ID': auth_token.twitch_id,
+                                        "Authorization": "Bearer " + auth_token.twitch_token}
                 parsingChannelQueryString = {"hub.mode": "subscribe", "hub.callback": auth_token.server_url + "/twitch",
                                              "hub.topic": "https://api.twitch.tv/helix/streams?user_id=" + ID, "hub.lease_seconds": 864000}
                 async with self.bot.session.post(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
@@ -89,7 +90,22 @@ class Webserver(commands.Cog):
                         print(resp.text)
                 await asyncio.sleep(2)
 
+        async with self.bot.session.get("https://id.twitch.tv/oauth2/validate", headers={'Authorization': "OAuth " + auth_token.twitch_token}) as resp:
+            if resp.status != 200:
+                print(resp.text)
+
+                queryString = {"client_id": auth_token.twitch_id,
+                               "client_secret": auth_token.twitch_secret,
+                               "grant_type": "client_credentials"}
+                async with self.bot.session.post("https://id.twitch.tv/oauth2/token", params=queryString) as resp2:
+                    if resp2.status != 200:
+                        print(resp.text)
+                    else:
+                        auth_token.twitch_secret = await resp2.json()[
+                            "client_id"]
+
     # pings feedburner to update feed
+
     async def ping_feedburner(self):
         parsingChannelUrl = "http://feedburner.google.com/fb/a/pingSubmit?bloglink=https%3A%2F%2Ffeeds.feedburner.com%2Fsurrenderat20%2FCqWw"
         async with self.bot.session.get(parsingChannelUrl) as resp:
@@ -337,7 +353,8 @@ class Webserver(commands.Cog):
 
         # getting channel data
         parsingChannelUrl = "https://api.twitch.tv/helix/users"
-        parsingChannelHeader = {'Client-ID': auth_token.twitch_id}
+        parsingChannelHeader = {'Client-ID': auth_token.twitch_id,
+                                "Authorization": "Bearer " + auth_token.twitch_token}
         parsingChannelQueryString = {"id": data["user_id"]}
         async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
             channel_obj = await resp.json()
@@ -345,7 +362,8 @@ class Webserver(commands.Cog):
 
         # getting game data
         parsingChannelUrl = "https://api.twitch.tv/helix/games"
-        parsingChannelHeader = {'Client-ID': auth_token.twitch_id}
+        parsingChannelHeader = {'Client-ID': auth_token.twitch_id,
+                                "Authorization": "Bearer " + auth_token.twitch_token}
         parsingChannelQueryString = {"id": data["game_id"]}
         async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
             game_obj = await resp.json()

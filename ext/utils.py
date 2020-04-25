@@ -11,8 +11,8 @@ class Utils(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-        self.svan_sleep_reminder = self.bot.loop.create_task(
-            self.sleep_reminder())
+        # self.svan_sleep_reminder = self.bot.loop.create_task(
+        #     self.sleep_reminder())
 
     # who and where the commands are permitted to use
     @commands.has_permissions(manage_messages=True)
