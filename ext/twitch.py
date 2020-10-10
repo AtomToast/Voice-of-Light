@@ -73,7 +73,7 @@ class Twitch(commands.Cog):
         async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
             channel_obj = await resp.json()
 
-        if len(channel_obj["data"]) == 0:
+        if "data" not in channel_obj:
             await ctx.send("Could not find a channel called " + channel)
             return
 

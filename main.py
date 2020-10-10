@@ -23,7 +23,7 @@ logger.addHandler(handler)
 
 
 # setting up bot instance
-description = "A bot that posts videos and streams.\n\nFor feedback and suggestions contact AtomToast#9642"
+description = "A bot that posts videos and streams.\n\nFor feedback and suggestions contact AtomToast#9642\n\nYou can find a small setup guide on https://github.com/AtomToast/Voice-of-Light/"
 extensions = ["ext.youtube", "ext.twitch", "ext.reddit",
               "ext.utils", "ext.webserver", "ext.surrenderat20"]
 
