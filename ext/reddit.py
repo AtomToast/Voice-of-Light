@@ -19,7 +19,7 @@ class Reddit(commands.Cog):
     def cog_unload(self):
         self.poll.cancel()
 
-    @tasks.loop(seconds=2.0)
+    @tasks.loop(seconds=10.0)
     async def poll(self):
         async with self.bot.pool.acquire() as db:
             # loop through all subreddits and check if a new post is up
@@ -32,7 +32,7 @@ class Reddit(commands.Cog):
                 async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader,
                                                 params=parsingChannelQueryString) as resp:
                     if resp.status > 400:
-                        await asyncio.sleep(2)
+                        await asyncio.sleep(10)
                         continue
 
                     try:
