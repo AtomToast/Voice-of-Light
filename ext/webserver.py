@@ -342,7 +342,17 @@ class Webserver(commands.Cog):
                     if guild is None:
                         await db.execute("DELETE FROM YoutubeSubscriptions WHERE YoutubeChannel=$1 AND Guild=$2", obj["feed"]["entry"]["yt:channelId"], row[2])
                     continue
-                await announceChannel.send(announcement, embed=emb)
+                try:
+                    await announceChannel.send(announcement, embed=emb)
+                except:
+                    print("----------------------------------------")
+                    print("A server fucked up")
+                    print("Couldn't send youtube notification")
+                    print("Guild object", guild)
+                    print("Guild ID: ", guild.id)
+                    print("Announcement Channel: ", announceChannel.id)
+                    print("----------------------------------------")
+
 
     # handler for post requests to the /twitch route
     async def twitch(self, request):
@@ -368,7 +378,14 @@ class Webserver(commands.Cog):
         parsingChannelQueryString = {"id": data["user_id"]}
         async with self.bot.session.get(parsingChannelUrl, headers=parsingChannelHeader, params=parsingChannelQueryString) as resp:
             channel_obj = await resp.json()
-        ch = channel_obj["data"][0]
+        try:
+            ch = channel_obj["data"][0]
+        except Exception as e:
+            print("--------------------------------------------------------------")
+            print("The culprit:")
+            print(channel_obj)
+            print("--------------------------------------------------------------")
+            raise e
 
         # getting game data
         parsingChannelUrl = "https://api.twitch.tv/helix/games"
