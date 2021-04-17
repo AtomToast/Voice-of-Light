@@ -90,6 +90,7 @@ class Webserver(commands.Cog):
                         print(resp.text)
                 await asyncio.sleep(2)
 
+        # update twitch token
         async with self.bot.session.get("https://id.twitch.tv/oauth2/validate", headers={'Authorization': "OAuth " + auth_token.twitch_token}) as resp:
             if resp.status != 200:
                 print(resp.text)
@@ -101,8 +102,17 @@ class Webserver(commands.Cog):
                     if resp2.status != 200:
                         print(resp.text)
                     else:
-                        auth_token.twitch_secret = await resp2.json()[
-                            "client_id"]
+                        auth_token.twitch_token = await resp2.json()["client_id"]
+
+                        with open("auth_token.py", "r") as file:
+                            auth_token_content = file.readlines()
+
+                        for i, v in enumerate(auth_token_content):
+                            if v.startswith("twitch_token"):
+                                auth_token_content[i] = f"twitch_token='{auth_token.twitch_token}'"
+
+                        with open("auth_token.py", "w") as file:
+                            file.writelines(auth_token_content)
 
     # pings feedburner to update feed
 
@@ -566,3 +576,5 @@ class Webserver(commands.Cog):
 
 def setup(bot):
     bot.add_cog(Webserver(bot))
+
+
