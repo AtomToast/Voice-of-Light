@@ -1,3 +1,19 @@
+# Why this bot will be dead soon
+
+For quite some time now I have lost the time to work on Voice of Light. Still I was trying to at least spend the time to keep the bot up and running for those of you that used the bot. (At the moment of writing this, it was around 700 Servers! My eternal gratitude to you all.)
+
+However, now Discord decided to create some breaking changes which would require some serious rewrites. On top of that because of these changes and prior issues with Discords actions, the library maintainer of the discord library I was using archived their repository.
+
+As a result of all of this, once those breaking changes drop, this bot will stop working and you will need a replacement. A bot that covers many of the features would for example be yagpdb.xyz. For the surrender@20 notifications I don't have an immediate solutions but perhaps a general RSS bot or a webhook can do the job
+
+If you care enough to read up more about the issue, the discord.py library maintainer has made a quite comprehensive writeup:
+https://gist.github.com/Rapptz/4a2f62751b9600a31a0d3c78100287f1
+Many thanks go out to Danny for his excellent work up until now.
+
+Should you want to pick up this project, the (admittably kinda sucky) code is all open source
+
+- AtomToast
+
 # Voice-of-Light
 A **Discord Notification bot** supporting Youtube uploads, Twitch and Youtube livestreams, subreddit posts and surrenderat20.net posts.  
 Also a unique surrenderat20.net keyword notification system!
